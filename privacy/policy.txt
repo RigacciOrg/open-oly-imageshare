@@ -1,0 +1,23 @@
+==== Open Oly ImageShare Privacy Policy ====
+
+Last modified: 06 October, 2023.
+
+Open Oly ImageShare is a Free and Open Source program developed 
+on a voluntary basis with the sole purpose of being useful to 
+those in need.
+
+By using Open Oly ImageShare, you agree that your personal 
+information will be handled as described in this Policy.
+
+  * The app does not collect or transmit user data outside the device.
+
+No data is collected by the app and nothing is sent over the 
+internet, you can inspect the operation of the program by 
+reading the source code available in the repository 
+https://github.com/RigacciOrg/open-oly-imageshare
+
+
+=== Contact ===
+
+If you have any questions about the Policy, please contact us 
+via niccolo@rigacci.org
