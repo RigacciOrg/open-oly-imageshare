@@ -1,0 +1,59 @@
+[
+    {
+        "type": "string",
+        "title": "Download folder",
+        "desc": "Where to save downloaded files, relative to External Storage (e.g. DCIM or Pictures)",
+        "section": "openolyimageshare",
+        "key": "download_dst"
+    },
+    {
+        "type": "string",
+        "title": "Camera IP address",
+        "desc": "IP address of the camera WiFi access point",
+        "section": "openolyimageshare",
+        "key": "olympus_host"
+    },
+    {
+        "type": "string",
+        "title": "Camera DCIM folder",
+        "desc": "Folder with the images on the camera memory",
+        "section": "openolyimageshare",
+        "key": "olympus_host_home"
+    },
+    {
+        "type": "title",
+        "title": "Thumbnails Cahce"
+    },
+    {
+        "type": "numeric",
+        "title": "Max days",
+        "desc": "Delete cached thumbnails older than this",
+        "section": "openolyimageshare",
+        "key": "max_cache_age_days"
+    },
+    {
+        "type": "string",
+        "title": "Cache directory",
+        "desc": "Where to store cached thumbnails, relative to the app folder",
+        "section": "openolyimageshare",
+        "key": "cache_root"
+    },
+    {
+        "type": "title",
+        "title": "Gallery Style"
+    },
+    {
+        "type": "numeric",
+        "title": "Top icons size",
+        "desc": "Set the size of icons on top bar",
+        "section": "openolyimageshare",
+        "key": "icon_size_top"
+    },
+    {
+        "type": "numeric",
+        "title": "Bottom icons size",
+        "desc": "Set the size of icons on screen bottom",
+        "section": "openolyimageshare",
+        "key": "icon_size_bottom"
+    }
+]
