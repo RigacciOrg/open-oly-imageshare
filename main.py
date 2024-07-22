@@ -43,7 +43,7 @@ __author__ = "Niccolo Rigacci"
 __copyright__ = "Copyright 2023 Niccolo Rigacci <niccolo@rigacci.org>"
 __license__ = "GPLv3-or-later"
 __email__ = "niccolo@rigacci.org"
-__version__ = "0.24"
+__version__ = "0.25"
 
 # Set the loglevel. The Android log file will be create into
 # [app_home]/files/app/.kivy/logs/
@@ -67,6 +67,9 @@ DOWNLOAD_DST = 'DCIM/OLYMPUS'
 
 # Olympus WiFi access point mode defaul IP address.
 OLYMPUS_HOST = '192.168.0.10'
+
+# Message displayed if connection check fails.
+CONNECT_HINT = '\n\n------\n\nOn the Olympus camera select "Connection to Smartphone" from the Playback Menu, then connect this device to the WiFi network displayed on the camera screen.\nNOTICE: On Android you may need to disable Mobile data to allow communication with the camera IP address.'
 
 # Default home directory for images.
 OLYMPUS_HOST_HOME = '/DCIM'
@@ -125,26 +128,33 @@ Builder.load_string("""
         spacing: 12
         padding: 6
         Button:
-            text: 'Gallery'
+            text: 'Camera Gallery'
+            size_hint_y: None
+            height: self.parent.height * 0.10
             on_press:
                 root.manager.transition.direction = 'left'
                 root.manager.current = 'thumbnails'
         Button:
             text: 'Check Camera Connection'
+            size_hint_y: None
+            height: self.parent.height * 0.10
             on_press:
                 root.manager.transition.direction = 'left'
                 root.manager.current = 'connection'
         Button:
             text: 'Settings'
+            size_hint_y: None
+            height: self.parent.height * 0.10
             on_press:
                 root.manager.transition.direction = 'left'
                 root.manager.current = 'settings'
         Button:
-            text: 'Remote Control'
-            disabled: True
-        Button:
             text: 'Quit'
-            disabled: True
+            size_hint_y: None
+            height: self.parent.height * 0.10
+            on_press: app.stop()
+        Widget:
+
 
 <SettingsScreen>:
     BoxLayout:
@@ -339,12 +349,12 @@ class ConnectionScreen(Screen):
         except Exception as ex:
             msg = 'Exception getting camera info: %s' % (ex,)
             Logger.error(msg)
-            self.ids.connection_label.text = msg
+            self.ids.connection_label.text = msg + CONNECT_HINT
             return
         if resp.status_code != 200:
             msg = 'Error in response status code: %s' % (resp.status_code,)
             Logger.error(msg)
-            self.ids.connection_label.text = msg
+            self.ids.connection_label.text = msg + CONNECT_HINT
             return
         self.ids.connection_label.text = resp.text
 
@@ -745,6 +755,9 @@ class MyApp(App):
         self.screen_manager.add_widget(settings_screen)
         self.screen_manager.add_widget(connection_screen)
         self.screen_manager.add_widget(ThumbnailsScreen(name='thumbnails'))
+
+        #from kivy.core.window import Window
+        #Window.size = (720, 1280)
 
         # Select the style of the Settings widget.
         #self.settings_cls = SettingsWithSpinner
