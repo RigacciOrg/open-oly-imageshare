@@ -2,10 +2,18 @@
     {
         "type": "string",
         "title": "Download folder",
-        "desc": "Where to save downloaded files, relative to External Storage (e.g. DCIM or Pictures)",
+        "desc": "Where to save downloaded files (e.g. DCIM or Pictures). Path relative to the External Storage",
         "section": "openolyimageshare",
         "key": "download_dst"
     },
+    {
+        "type": "bool",
+        "title": "Use External Storage",
+        "desc": "Download folder is relative to the External Storage. If disabled, you can specify an absolute path starting e.g. with \"/storage\"",
+        "section": "openolyimageshare",
+        "key": "download_dst_is_relative"
+    },
+
     {
         "type": "string",
         "title": "Camera IP address",
@@ -16,7 +24,7 @@
     {
         "type": "string",
         "title": "Camera DCIM folder",
-        "desc": "Folder with the images on the camera memory",
+        "desc": "Folder with images in the camera memory",
         "section": "openolyimageshare",
         "key": "olympus_host_home"
     },
@@ -41,6 +49,20 @@
     {
         "type": "title",
         "title": "Camera Gallery Style"
+    },
+    {
+        "type": "numeric",
+        "title": "Grid rows",
+        "desc": "Rows in the thumbnails gallery view",
+        "section": "openolyimageshare",
+        "key": "gallery_rows"
+    },
+    {
+        "type": "numeric",
+        "title": "Grid columns",
+        "desc": "Columns in the thumbnails gallery view",
+        "section": "openolyimageshare",
+        "key": "gallery_columns"
     },
     {
         "type": "numeric",

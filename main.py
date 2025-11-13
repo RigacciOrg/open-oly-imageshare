@@ -2,28 +2,32 @@
 # -*- coding: utf-8 -*-
 """
 Python app to download images from an Olympus camera through the
-WiFi API. The app will show the thumbnails pages, from there it
+Wi-Fi API. The app will show the thumbnails pages, from there it
 is possible to select which images to download.
 
 See also: https://github.com/joergmlpts/olympus-wifi
 
 NOTICE:
 For the Settings widget to run without errors into the X.org
-environment you should install the xclip and xsel tools.
+environment you should install the xclip and xsel tools
+(e.g. from the Debian packages with the same names).
 """
 
 import hashlib
 import os
 import requests
 import time
+from functools import partial
 from threading import Thread
 
 import kivy
 #kivy.require('1.11.0')
 from kivy.app import App
 from kivy.base import EventLoop
+from kivy.clock import Clock
 from kivy.config import Config, ConfigParser
 from kivy.core.text import LabelBase
+from kivy.core.window import Window
 from kivy.lang import Builder
 from kivy.logger import Logger, LOG_LEVELS
 from kivy.uix.behaviors import ButtonBehavior
@@ -34,16 +38,17 @@ from kivy.uix.gridlayout import GridLayout
 from kivy.uix.image import Image
 from kivy.uix.label import Label
 from kivy.uix.popup import Popup
+from kivy.uix.progressbar import ProgressBar
 from kivy.uix.screenmanager import ScreenManager, Screen
 from kivy.uix.settings import Settings, SettingsWithNoMenu
 from kivy.uix.widget import Widget
 from kivy.utils import platform
 
 __author__ = "Niccolo Rigacci"
-__copyright__ = "Copyright 2023 Niccolo Rigacci <niccolo@rigacci.org>"
+__copyright__ = "Copyright 2023-2025 Niccolo Rigacci <niccolo@rigacci.org>"
 __license__ = "GPLv3-or-later"
 __email__ = "niccolo@rigacci.org"
-__version__ = "0.25"
+__version__ = "0.38"
 
 # Set the loglevel. The Android log file will be create into
 # [app_home]/files/app/.kivy/logs/
@@ -65,11 +70,21 @@ MAX_CACHE_AGE_DAYS = 180
 # android.storage.primary_external_storage_path or $HOME (GNU/Linux).
 DOWNLOAD_DST = 'DCIM/OLYMPUS'
 
+# Is download directory relative to External Storage?
+# NOTICE: Use integer value not boolean, despite settings.json has "type": "bool".
+DOWNLOAD_DST_IS_RELATIVE = 1
+
 # Olympus WiFi access point mode defaul IP address.
 OLYMPUS_HOST = '192.168.0.10'
+# Add a delay downloading from OLYMPUS_HOST, for testing.
+SIMULATE_SLOW_WIFI = False
 
 # Message displayed if connection check fails.
-CONNECT_HINT = '\n\n------\n\nOn the Olympus camera select "Connection to Smartphone" from the Playback Menu, then connect this device to the WiFi network displayed on the camera screen.\nNOTICE: On Android you may need to disable Mobile data to allow communication with the camera IP address.'
+CONNECT_HINT = '\n\n------\n\n   On the Olympus camera select "Connection to Smartphone" from the Playback Menu, then connect this device to the WiFi network displayed on the camera screen.\nNOTICE: On Android you may need to disable Mobile data to allow communication with the camera IP address.'
+CONNECT_HINT = '\n\n------\n\nHow To Connect the Camera:\nSelect "Connection to Smartphone" from the Playback Menu of the Olympus camera, then connect this device to the WiFi network displayed on the camera screen.\nNOTICE: On Android you may need to disable Mobile data to allow communication with the camera IP address.'
+
+# Message displayed into the about screen.
+ABOUT_MSG = 'Open Oly ImageShare v.%s\n\n%s\nLicense: %s\n\nExternal storage: %%s\nDownload folder: %%s\n\n%s' % (__version__, __copyright__, __license__, 'https://github.com/RigacciOrg/open-oly-imageshare')
 
 # Default home directory for images.
 OLYMPUS_HOST_HOME = '/DCIM'
@@ -77,6 +92,8 @@ OLYMPUS_HOST_HOME = '/DCIM'
 # Interface settings.
 ICON_SIZE_TOP = 42
 ICON_SIZE_BOTTOM = 32
+GALLERY_ROWS = 6
+GALLERY_COLUMNS = 4
 
 # Olympus DCIM directory attribute bits.
 OLYMPUS_ATTRIB_NONE      =  0
@@ -117,6 +134,11 @@ LABEL_FILE_COUNT_PROGRESS = 'File %d/%d'
 BLANK_IMAGE = 'res/img/blank-image.png'
 BROKEN_IMAGE = 'res/img/broken-image-gray.png'
 
+# User interface size hints.
+SIZE_HINT_DOWNLOAD_VERTICAL = (0.90, 0.30)
+SIZE_HINT_MY_POPUP_VERTICAL = (0.90, 0.45)
+
+
 # Register custom fontstyle.
 LabelBase.register(name='fa-solid', fn_regular='res/fonts/fa-solid-900.ttf')
 
@@ -149,12 +171,18 @@ Builder.load_string("""
                 root.manager.transition.direction = 'left'
                 root.manager.current = 'settings'
         Button:
+            text: 'About'
+            size_hint_y: None
+            height: self.parent.height * 0.10
+            on_press:
+                root.manager.transition.direction = 'left'
+                root.manager.current = 'about'
+        Button:
             text: 'Quit'
             size_hint_y: None
             height: self.parent.height * 0.10
             on_press: app.stop()
         Widget:
-
 
 <SettingsScreen>:
     BoxLayout:
@@ -204,8 +232,8 @@ Builder.load_string("""
             Button:
                 font_name: 'fa-solid'
                 font_size: self.parent.font_size
-                text: root.FA_TRASH
-                on_press: root.delete_selected()
+                text: root.FA_CAMERA
+                on_press: root.share_selected()
                 disabled: True
             Button:
                 font_name: 'fa-solid'
@@ -256,6 +284,20 @@ Builder.load_string("""
                 font_name: 'fa-solid'
                 font_size: self.parent.font_size
                 text: root.FA_ANGLE_RIGHT
+
+<AboutScreen>:
+    BoxLayout:
+        id: about_content
+        orientation: 'vertical'
+        BoxLayout:
+            padding: 8
+            Label:
+                id: about_label
+                text: ''
+                text_size: self.size
+                halign: 'left'
+                valign: 'top'
+
 """)
 
 
@@ -274,7 +316,8 @@ def myPopup(title='Popup Title', message='Popup message.', buttons_text=['Cancel
         button_width = 1.0 / len(buttons_text)
         spacer_width = 0
     box = BoxLayout(orientation='vertical', spacing=10)
-    box.add_widget(Label(text=message, size_hint=(1.0, 0.75)))
+    label_text_width = int(Window.width * SIZE_HINT_MY_POPUP_VERTICAL[0] * 0.80)
+    box.add_widget(Label(text=message, halign='left', valign='top', text_size=(label_text_width, None), size_hint=(1.0, 0.75)))
     btn_box = BoxLayout(spacing=10, padding=8, size_hint=(1.0, 0.25))
     if spacer_width > 0:
         btn_box.add_widget(Widget(size_hint=(spacer_width, 1.0)))
@@ -285,10 +328,10 @@ def myPopup(title='Popup Title', message='Popup message.', buttons_text=['Cancel
         buttons[i].btn_index = i
         btn_box.add_widget(buttons[i])
     box.add_widget(btn_box)
-    popup = Popup(title=title, content=box, size_hint=(0.84, 0.45))
+    popup = Popup(title=title, content=box, size_hint=SIZE_HINT_MY_POPUP_VERTICAL)
     # One callback function to rule them all.
     def btn_callback(self):
-        Logger.debug('Pressed popup button #%s' % (self.btn_index,))
+        Logger.debug('myPopup: Pressed button #%s' % (self.btn_index,))
         popup.dismiss()
         if callbacks[self.btn_index] != None:
             callbacks[self.btn_index]()
@@ -343,17 +386,17 @@ class ConnectionScreen(Screen):
         """  """
         self.cfg = App.get_running_app().config
         url = 'http://%s%s' % (self.cfg.get('openolyimageshare', 'olympus_host'), GET_CAMINFO)
-        Logger.debug('Getting URL: "%s"' % (url,))
+        Logger.debug('Connection: Getting URL: "%s"' % (url,))
         try:
             resp = requests.get(url, timeout=TIMEOUT_GET_COMMAND)
         except Exception as ex:
             msg = 'Exception getting camera info: %s' % (ex,)
-            Logger.error(msg)
+            Logger.error('Connection: ' + msg)
             self.ids.connection_label.text = msg + CONNECT_HINT
             return
         if resp.status_code != 200:
             msg = 'Error in response status code: %s' % (resp.status_code,)
-            Logger.error(msg)
+            Logger.error('Connection: ' + msg)
             self.ids.connection_label.text = msg + CONNECT_HINT
             return
         self.ids.connection_label.text = resp.text
@@ -361,7 +404,18 @@ class ConnectionScreen(Screen):
 
 class SettingsScreen(Screen):
     """ Settings screen """
-    pass
+
+    def on_enter(self):
+        pass
+
+
+class AboutScreen(Screen):
+    """ About screen """
+
+    def on_enter(self):
+        app = App.get_running_app()
+        app_download_dir = app.app_download_dir()
+        self.ids.about_label.text = ABOUT_MSG % (app.primary_ext_storage, app_download_dir)
 
 
 class ThumbnailsScreen(Screen):
@@ -385,6 +439,8 @@ class ThumbnailsScreen(Screen):
     FA_FORWARD_STEP  = '\uf051'
     FA_BACKWARD_FAST = '\uf049'
     FA_FORWARD_FAST  = '\uf050'
+    FA_CAMERA        = '\uf030'
+    FA_SHARE_NODES   = '\uf1e0'
 
     cfg = None
     grid = None
@@ -395,22 +451,23 @@ class ThumbnailsScreen(Screen):
 
     def on_pre_enter(self):
         """ Initialize the images list and create directories """
-        self.cfg = App.get_running_app().config
+        app = App.get_running_app()
+        self.cfg = app.config
         self.ids.top_buttons.font_size = self.cfg.getint('openolyimageshare', 'icon_size_top')
         self.ids.bottom_buttons.font_size = self.cfg.getint('openolyimageshare', 'icon_size_bottom')
         self.current_page = 0
-        self.primary_ext_storage = App.get_running_app().primary_ext_storage
-        cache_subdir = self.cfg.get('openolyimageshare', 'cache_root')
-        download_dir = os.path.join(self.primary_ext_storage, self.cfg.get('openolyimageshare', 'download_dst'))
-        Logger.info('Creating cache and download directories: "%s", "%s"' % (cache_subdir, download_dir))
+        self.primary_ext_storage = app.primary_ext_storage
+        self.cache_subdir = self.cfg.get('openolyimageshare', 'cache_root')
+        self.download_dir = app.app_download_dir()
+        Logger.info('Thumbnails: Creating cache and download directories: "%s", "%s"' % (self.cache_subdir, self.download_dir))
         try:
-            os.makedirs(cache_subdir, exist_ok=True)
+            os.makedirs(self.cache_subdir, exist_ok=True)
         except Exception as ex:
-            Logger.error('Exception creating cache directory "%s": %s' % (cache_subdir, ex))
+            Logger.error('Thumbnails: Exception creating cache directory "%s": %s' % (self.cache_subdir, ex))
         try:
-            os.makedirs(download_dir, exist_ok=True)
+            os.makedirs(self.download_dir, exist_ok=True)
         except Exception as ex:
-            Logger.error('Exception creating download directory "%s": %s' % (download_dir, ex))
+            Logger.error('Thumbnails: Exception creating download directory "%s": %s' % (self.download_dir, ex))
 
 
     def on_enter(self):
@@ -422,28 +479,29 @@ class ThumbnailsScreen(Screen):
 
 
     def get_dcim_imglist(self, directory):
-        """ Read a DCIM directory listing via WiFi camera access point """
+        """ Read a DCIM directory listing via WiFi camera access point and fill the self.images_list """
         # Switch the camera to play mode.
         url = 'http://%s%s' % (self.cfg.get('openolyimageshare', 'olympus_host'), GET_MODE_PLAY)
-        Logger.info('Setting camera mode: %s' % (url,))
+        Logger.info('Thumbnails: Setting camera mode: %s' % (url,))
         try:
             resp = requests.get(url, timeout=TIMEOUT_GET_COMMAND)
         except Exception as ex:
-            Logger.error('Exception switching camera mode to play: %s' % (ex,))
+            Logger.error('Thumbnails: Exception switching camera mode to play: %s' % (ex,))
             resp = None
         if resp is not None and resp.status_code != 200:
-            Logger.error('Error in response status code: %s' % (resp.status_code,))
-        # Get the DCIM directory listin.
+            Logger.error('Thumbnails: Error in response status code: %s' % (resp.status_code,))
+        # Get the DCIM directory listing.
         url = 'http://%s%s?DIR=%s' % (self.cfg.get('openolyimageshare', 'olympus_host'), GET_IMGLIST, directory)
-        Logger.debug('Getting URL: "%s"' % (url,))
+        Logger.debug('Thumbnails: Getting URL: "%s"' % (url,))
         try:
             resp = requests.get(url, timeout=TIMEOUT_GET_IMGLIST)
         except Exception as ex:
-            Logger.error('Exception getting image list: %s' % (ex,))
+            Logger.error('Thumbnails: Exception getting image list: %s' % (ex,))
             return
         if resp.status_code != 200:
-            Logger.error('Error in response status code: %s' % (resp.status_code,))
+            Logger.error('Thumbnails: Error in response status code: %s' % (resp.status_code,))
             return
+        #Logger.debug('resp.text: %s' % (resp.text,))
         # Response example:
         # VER_100
         # /DCIM,100OLYMP,0,16,22278,35850
@@ -454,7 +512,7 @@ class ThumbnailsScreen(Screen):
                 continue
             parts = line.split(',')
             if len(parts) != 6:
-                Logger.warning('Malformed line from GET_IMGLIST: "%s"' % (line,))
+                Logger.warning('Thumbnails: Malformed line from GET_IMGLIST: "%s"' % (line,))
                 continue
             try:
                 path = parts[0]
@@ -464,7 +522,7 @@ class ThumbnailsScreen(Screen):
                 item_date = int(parts[4])
                 item_time = int(parts[5])
             except Exception as ex:
-                Logger.warning('Exception parsing line "%s": %s' % (line, ex))
+                Logger.warning('Thumbnails: Exception parsing line "%s": %s' % (line, ex))
                 continue
             dcim_path = '/'.join((path, item))
             if item_attrib & OLYMPUS_ATTRIB_HIDDEN:
@@ -484,7 +542,7 @@ class ThumbnailsScreen(Screen):
 
 
     def read_images_list(self):
-        """ Read the full image list creating the sorted list """
+        """ Read the full image list creating the sorted list self.images_list """
         self.images_list = []
         self.images_selected = {}
         self.get_dcim_imglist(self.cfg.get('openolyimageshare', 'olympus_host_home'))
@@ -494,7 +552,7 @@ class ThumbnailsScreen(Screen):
 
     def cache_purge_older(self):
         """ Delete cached thumbnails not touched for too many days """
-        Logger.debug('Cleaning cache directory from older files')
+        Logger.debug('CachePurge: Cleaning older files in cache directory')
         for root, d_names, f_names in os.walk(self.cfg.get('openolyimageshare', 'cache_root')):
             for f in f_names:
                 filename = os.path.join(root, f)
@@ -502,21 +560,21 @@ class ThumbnailsScreen(Screen):
                     try:
                         age = time.time() - os.path.getmtime(filename)
                     except Exception as ex:
-                        Logger.error('Exception getting mtime from "%s": %s' % (filename, ex))
+                        Logger.error('CachePurge: Exception getting mtime from "%s": %s' % (filename, ex))
                         continue
                     if age > (self.cfg.getint('openolyimageshare', 'max_cache_age_days') * 24 * 3600):
-                        Logger.debug('Purging file "%s"' % (filename,))
+                        Logger.debug('CachePurge: Purging file "%s"' % (filename,))
                         try:
                             os.unlink(filename)
                         except Exception as ex:
-                            Logger.error('Exception removing file "%s": %s' % (filename, ex))
+                            Logger.error('CachePurge: Exception removing file "%s": %s' % (filename, ex))
 
 
     def logs_purge_older(self):
         """ Purge log files older than two weeks """
         if not os.path.exists(ANDROID_KIVY_LOGS):
             return
-        Logger.debug('Cleaning log directory from older files')
+        Logger.debug('LogsPurge: Cleaning older files in log directory')
         for root, d_names, f_names in os.walk(ANDROID_KIVY_LOGS):
             for f in f_names:
                 if f.startswith('kivy_') and f.endswith('.txt'):
@@ -537,6 +595,8 @@ class ThumbnailsScreen(Screen):
         mark_size = self.cfg.getint('openolyimageshare', 'icon_size_top')
         self.grid = self.ids.thumbnails_grid
         self.grid.clear_widgets()
+        self.grid.cols = self.cfg.getint('openolyimageshare', 'gallery_columns')
+        self.grid.rows = self.cfg.getint('openolyimageshare', 'gallery_rows')
         self.thumbs_widgets_list = []
         current_image = self.current_page * self.grid.rows * self.grid.cols
         for i in range(self.grid.rows):
@@ -550,7 +610,7 @@ class ThumbnailsScreen(Screen):
                     if thumbnail_image_source is None or not os.path.exists(thumbnail_image_source):
                         thumbnail_image_source = BROKEN_IMAGE
                 thumb = FloatLayout()
-                img = ImageButton(source=thumbnail_image_source, pos_hint={'x': 0, 'y': 0})
+                img = ImageButton(source=thumbnail_image_source, pos_hint={'x': 0, 'y': 0}, size_hint=(1, 1), allow_stretch=True, keep_ratio=True)
                 img.thumbs_screen = self
                 img.dcim_path = dcim_path
                 img.markshadow = Label(font_name='fa-solid', font_size=int(mark_size*1.25), color=(0,0,0,0.6), bold=True, halign='left', valign='middle', pos_hint={'x': 0.35, 'y': 0.35})
@@ -594,10 +654,10 @@ class ThumbnailsScreen(Screen):
         try:
             os.makedirs(cache_subdir, exist_ok=True)
         except Exception as ex:
-            Logger.error('Exception creating directory "%s": %s' % (cache_subdir, ex))
+            Logger.error('ThumbnailsScreen: Exception creating directory "%s": %s' % (cache_subdir, ex))
             return None
         url = 'http://%s%s%s' % (self.cfg.get('openolyimageshare', 'olympus_host'), GET_THUMBNAIL, item[ITEM_KEY_FILENAME])
-        Logger.debug('Getting URL: "%s"' % (url,))
+        Logger.debug('Thumbnails: Getting URL: "%s"' % (url,))
         timestamp_now = time.strftime('%Y-%m-%dT%H:%M:%S')
         return self.wget_file(url, cache_filename, timestamp=timestamp_now, timeout=TIMEOUT_GET_THUMBNAIL)
 
@@ -641,21 +701,9 @@ class ThumbnailsScreen(Screen):
             t.unselect()
 
 
-    def delete_selected(self):
-        """ NOTICE: The WiFi API does not consent file delete """
-        selected = len(self.images_selected)
-        if selected > 0:
-            message = 'WARNING!\n\nReally delete %d files?\nDeleted files cannot be recovered!' % (selected,)
-            myPopup(title='File Delete', message=message, buttons_text=['Cancel', 'OK'], callbacks=[None, self.delete_selected_confirmed])
-            # NOTICE: The popup is not blocking; it returns while it is still open.
-
-
-    def delete_selected_confirmed(self):
-        """ Start the file delete loop showing a progress Popup """
-        msg_text = LABEL_FILE_COUNT_PROGRESS % (1, len(self.images_selected))
-        self.progress_popup = Popup(title='Delete...', content=Label(text=msg_text), auto_dismiss=False, size_hint=(0.72, 0.18))
-        self.progress_popup.open()
-        #Thread(target=self.delete_loop).start()
+    def share_selected(self):
+        """ TODO: Implement a share method """
+        return
 
 
     def download_selected(self):
@@ -663,8 +711,60 @@ class ThumbnailsScreen(Screen):
         selected = len(self.images_selected)
         if selected > 0:
             message = 'Ready to download %d files...' % (selected,)
-            myPopup(title='File Download', message=message, buttons_text=['Cancel', 'OK'], callbacks=[None, self.download_selected_confirmed])
-            # NOTICE: The popup is not blocking; it returns while it is still open.
+            # Open a non blocking Popup (it returns while it is still open).
+            self.download_popup = myPopup(title='File Download', message=message, buttons_text=['Cancel', 'OK'], callbacks=[None, self.download_selected_confirmed])
+
+
+    def screen_popup(self, title, message, dt):
+        """ Display a popup from the main Kivy thread of this Screen """
+        myPopup(title=title, message=message, buttons_text=['Cancel'], callbacks=[None])
+
+
+    class downloadPopup(Popup):
+
+        def __init__(self, on_cancel=None, **kwargs):
+            super().__init__(**kwargs)
+            self.dismissed = False
+            self.on_cancel = on_cancel
+            self.message = Label(text=self.content.text, size_hint=(1, 0.25))
+            self.progress_bar_count = ProgressBar(max=100, value=0, size_hint=(1, 0.10))
+            self.progress_bar_file = ProgressBar(max=100, value=0, size_hint=(1, 0.10))
+            btn_box = BoxLayout(spacing=10, padding=8, size_hint=(1.0, 0.25))
+            btn_box.add_widget(Widget(size_hint=(0.75, 1.0)))
+            btn_cancel = Button(text='Cancel', size_hint=(0.25, 1.0))
+            btn_cancel.bind(on_press=self.on_cancel)
+            btn_box.add_widget(btn_cancel)
+            layout = BoxLayout(orientation='vertical', spacing=5)
+            layout.add_widget(self.message)
+            layout.add_widget(self.progress_bar_count)
+            layout.add_widget(self.progress_bar_file)
+            layout.add_widget(btn_box)
+            self.content = layout
+
+        def on_open(self):
+            # Warning: open() and dismiss() are called asyncronously,
+            # so avoid binding if already dismissed (and unbinded).
+            if not self.dismissed:
+                # Bind keypress
+                Window.bind(on_key_down=self._on_key_down)
+
+        def on_dismiss(self):
+            self.dismissed = True
+            # Unbind to avoid side-effects
+            Window.unbind(on_key_down=self._on_key_down)
+
+        def _on_key_down(self, window, key, scancode, codepoint, modifiers):
+            # ESC key = 27
+            if key == 27:
+                self.on_cancel(None)
+                return True
+            return False
+
+
+    def cancel_download(self, event):
+        """ Interrupt files download """
+        Logger.info('Download: Cancel requested')
+        self.download_cancel_requested = True
 
 
     def download_selected_confirmed(self):
@@ -674,70 +774,130 @@ class ThumbnailsScreen(Screen):
         # Also the Popup.open() must be called here, otherwise the error:
         # "Cannot change graphics instruction outside the main Kivy thread".
         msg_text = LABEL_FILE_COUNT_PROGRESS % (1, len(self.images_selected))
-        self.progress_popup = Popup(title='Downloading...', content=Label(text=msg_text), auto_dismiss=False, size_hint=(0.64, 0.24))
+        self.progress_popup = self.downloadPopup(on_cancel=self.cancel_download, title='Downloading...', content=Label(text=msg_text), auto_dismiss=False, size_hint=SIZE_HINT_DOWNLOAD_VERTICAL)
         self.progress_popup.open()
-        download_dir = os.path.join(self.primary_ext_storage, self.cfg.get('openolyimageshare', 'download_dst'))
         try:
-            os.makedirs(download_dir, exist_ok=True)
+            os.makedirs(self.download_dir, exist_ok=True)
         except Exception as ex:
-            Logger.error('Exception creating download directory "%s": %s' % (download_dir, ex))
+            Logger.error('Download: Exception creating download directory "%s": %s' % (self.download_dir, ex))
             self.progress_popup.dismiss()
             return
         Thread(target=self.download_loop).start()
 
 
     def download_loop(self):
-        """ File download loop executed into a background thread """
+        """ File download loop executed into a background thread, showing progress bar """
         count = 1
         count_tot = len(self.images_selected)
-        download_dir = os.path.join(self.primary_ext_storage, self.cfg.get('openolyimageshare', 'download_dst'))
+        self.download_cancel_requested = False
         for img in self.images_list:
             dcim_path = img[ITEM_KEY_FILENAME]
             if dcim_path in self.images_selected:
-                Logger.info('Download %s' % (dcim_path,))
+                Logger.info('Download: Downloading %s' % (dcim_path,))
+                count_percent = int((count - 1) * 100 / count_tot)
+                self.progress_popup.message.text = LABEL_FILE_COUNT_PROGRESS % (count, count_tot)
+                self.progress_popup.progress_bar_count.value = count_percent
                 url = 'http://%s%s' % (self.cfg.get('openolyimageshare', 'olympus_host'), dcim_path)
-                dst_filename = os.path.join(download_dir, os.path.basename(dcim_path))
+                dst_filename = os.path.join(self.download_dir, os.path.basename(dcim_path))
                 dst_timestamp = img[ITEM_KEY_TIMESTAMP]
                 dst_size = img[ITEM_KEY_SIZE]
-                dst_file = self.wget_file(url, dst_filename, timestamp=dst_timestamp, filesize=dst_size, timeout=TIMEOUT_GET_FILE)
+                dst_file = self.download_file(url, dst_filename, timestamp=dst_timestamp, filesize=dst_size, timeout=TIMEOUT_GET_FILE)
                 if dst_file is not None:
                     count += 1
                     del self.images_selected[dcim_path]
-                # Update the selection counter and popup message.
+                # Update the selection counter.
                 self.ids.lbl_selection.text = LABEL_SELECTION % (len(self.images_selected), len(self.images_list))
-                if count <= count_tot:
-                    self.progress_popup.content.text = LABEL_FILE_COUNT_PROGRESS % (count, count_tot)
+            if self.download_cancel_requested:
+                break
         self.progress_popup.dismiss()
         # The self.refresh_thumbnails_page() must not add or delete graphics
         # because here it is called it outside of the main Kivy thread.
         self.refresh_thumbnails_page()
 
 
-    def wget_file(self, url, dst_filename, timestamp=None, filesize=None, timeout=2.0):
+    def wget_file(self, url, dst_filename, timestamp=None, timeout=2.0):
         """ Get a file via the HTTP GET method """
-        # TODO: Check if downloaded file size matches filesize.
-        Logger.debug('Downloading file: "%s" => "%s"' % (url, dst_filename))
+        Logger.debug('wget_file: Getting file: "%s" => "%s"' % (url, dst_filename))
         if not os.path.exists(dst_filename):
             try:
                 resp = requests.get(url, timeout=timeout)
             except Exception as ex:
-                Logger.error('Exception getting file "%s": %s' % (url, ex))
+                Logger.error('wget_file: Exception getting file "%s": %s' % (url, ex))
                 resp = None
                 dst_filename = None
             if resp is not None and resp.status_code != 200:
-                Logger.error('Response error getting file "%s": %s' % (url, resp.status_code))
+                Logger.error('wget_file: Response error getting file "%s": %s' % (url, resp.status_code))
                 dst_filename = None
             if dst_filename is not None:
                 try:
                     open(dst_filename, 'wb').write(resp.content)
-                    Logger.info('Saved "%s"' % (dst_filename,))
+                    Logger.info('wget_file: Saved "%s"' % (dst_filename,))
                 except Exception as ex:
-                    Logger.error('Exception saving file "%s": %s' % (dst_filename, ex))
+                    Logger.error('wget_file: Exception saving file "%s": %s' % (dst_filename, ex))
                     dst_filename = None
-        if dst_filename is not None and timestamp is not None:
-            mtime_epoch = int(time.mktime(time.strptime(timestamp, '%Y-%m-%dT%H:%M:%S')))
-            os.utime(dst_filename, (mtime_epoch, mtime_epoch))
+            # Set the modified time to the file.
+            if dst_filename is not None and timestamp is not None:
+                mtime_epoch = int(time.mktime(time.strptime(timestamp, '%Y-%m-%dT%H:%M:%S')))
+                os.utime(dst_filename, (mtime_epoch, mtime_epoch))
         return dst_filename
+
+
+    def download_file(self, url, dst_filename, timestamp=None, filesize=None, timeout=2.0):
+        """ Download an HTTP file in chunks updating a progress bar """
+        Logger.debug('Download: Downloading file: "%s" => "%s"' % (url, dst_filename))
+        photo_basename = os.path.basename(dst_filename)
+        if os.path.exists(dst_filename):
+            Logger.warning('Download: File already downloaded: "%s"' % (dst_filename,))
+        else:
+            try:
+                with requests.get(url, timeout=timeout, stream=True) as r:
+                    r.raise_for_status()
+                    total = int(r.headers.get('content-length', 0))
+                    downloaded = 0
+                    with open(dst_filename, 'wb') as f:
+                        for chunk in r.iter_content(chunk_size=65536):
+                            if chunk:
+                                f.write(chunk)
+                                downloaded += len(chunk)
+                                percent = int(downloaded / total * 100)
+                                Clock.schedule_once(lambda dt, p=percent: self.update_progress(p))
+                                # Simulate a slow Wi-Fi connection.
+                                if SIMULATE_SLOW_WIFI:
+                                    time.sleep(0.02)
+                            if self.download_cancel_requested:
+                                break
+            except Exception as ex:
+                Logger.error('Download: Exception requesting file "%s": %s' % (url, ex))
+                Clock.schedule_once(partial(self.screen_popup, 'Download Error', 'Exception requesting file: %s' % (ex,)))
+                self.download_cancel_requested = True
+            if self.download_cancel_requested:
+                try:
+                    os.unlink(dst_filename)
+                except Exception as ex:
+                    Logger.error('Download: Exception deleting partial file "%s": %s' % (dst_filename, ex))
+                dst_filename = None
+            # Set the modified time to the file.
+            if dst_filename is not None and timestamp is not None:
+                try:
+                    mtime_epoch = int(time.mktime(time.strptime(timestamp, '%Y-%m-%dT%H:%M:%S')))
+                    os.utime(dst_filename, (mtime_epoch, mtime_epoch))
+                except Exception as ex:
+                    Logger.error('Download: Exception changing time of file "%s": %s' % (dst_filename, ex))
+        if dst_filename is not None and filesize is not None:
+            downloaded_file_size = os.path.getsize(dst_filename)
+            if downloaded_file_size != filesize:
+                Logger.error('Download: Downloaded file %s size FAIL: %d (expcted %d)' % (dst_filename, downloaded_file_size, filesize))
+                # Show the error popup in the main Kivy thread.
+                Clock.schedule_once(partial(self.screen_popup, 'Download Error', 'File %s: downloaded size does not match size in camera listing.' % (photo_basename,)))
+            else:
+                Logger.debug('Download: Downloaded file %s size OK: %d' % (dst_filename, downloaded_file_size))
+        return dst_filename
+
+
+    def update_progress(self, percent):
+        self.progress_popup.progress_bar_file.value = percent
+        if (percent % 10) == 0:
+            Logger.debug('Download: Downloaded %d%%)' % (percent,))
 
 
 class MyApp(App):
@@ -752,12 +912,11 @@ class MyApp(App):
         self.screen_manager.add_widget(MenuScreen(name='menu'))
         settings_screen = SettingsScreen(name='settings')
         connection_screen = ConnectionScreen(name='connection')
+        about_screen = AboutScreen(name='about')
         self.screen_manager.add_widget(settings_screen)
         self.screen_manager.add_widget(connection_screen)
         self.screen_manager.add_widget(ThumbnailsScreen(name='thumbnails'))
-
-        #from kivy.core.window import Window
-        #Window.size = (720, 1280)
+        self.screen_manager.add_widget(about_screen)
 
         # Select the style of the Settings widget.
         #self.settings_cls = SettingsWithSpinner
@@ -769,11 +928,14 @@ class MyApp(App):
         self.config.read('config.ini')
         # Set defaults for options not found in config file.
         config_defaults = {
-                'cache_root': CACHE_ROOT,
-                'max_cache_age_days': MAX_CACHE_AGE_DAYS,
                 'download_dst': DOWNLOAD_DST,
+                'download_dst_is_relative': DOWNLOAD_DST_IS_RELATIVE,
                 'olympus_host': OLYMPUS_HOST,
                 'olympus_host_home': OLYMPUS_HOST_HOME,
+                'cache_root': CACHE_ROOT,
+                'max_cache_age_days': MAX_CACHE_AGE_DAYS,
+                'gallery_rows': GALLERY_ROWS,
+                'gallery_columns': GALLERY_COLUMNS,
                 'icon_size_top': ICON_SIZE_TOP,
                 'icon_size_bottom': ICON_SIZE_BOTTOM
         }
@@ -783,6 +945,7 @@ class MyApp(App):
         settings_widget.add_json_panel('Settings', self.config, 'res/layout/settings.json')
         settings_screen.ids.settings_widget_container.add_widget(settings_widget)
         return self.screen_manager
+
 
     def hook_keyboard(self, window, key, *largs):
         """ Itercept Android Back button """
@@ -794,19 +957,39 @@ class MyApp(App):
 
     def on_start(self):
         EventLoop.window.bind(on_keyboard=self.hook_keyboard)
+        # Set the default storage path depending on the device
         if platform == "android":
             # Import necessary modules for Android permissions.
             from android.storage import primary_external_storage_path
             from android.permissions import request_permissions, Permission
             # No permissions are required to create a subdirectory in DCIM.
             request_permissions([
-                # Permission.WRITE_EXTERNAL_STORAGE,
-                # Permission.READ_EXTERNAL_STORAGE,
+                Permission.WRITE_EXTERNAL_STORAGE,
+                Permission.READ_EXTERNAL_STORAGE,
                 # Permission.CAMERA,
                 Permission.INTERNET
             ])
-        # Set the default storage path depending on the device
-        self.primary_ext_storage = primary_external_storage_path() if platform == "android" else os.environ["HOME"]
+            self.primary_ext_storage = primary_external_storage_path()
+        else:
+            # Probably running in a desktop environment.
+            self.primary_ext_storage = os.environ['HOME']
+            Window.size = (540, 960)
+        # Download destination is relative or absolute.
+        app_download_dir = self.app_download_dir()
+        Logger.info('MyApp: primary_ext_storage: %s' % (self.primary_ext_storage,))
+        Logger.info('MyApp: app_download_dir(): %s' % (app_download_dir,))
+
+
+    def app_download_dir(self):
+        """ Return the path for download, from config """
+        dst_relative = self.config.getboolean('openolyimageshare', 'download_dst_is_relative')
+        download_dst = self.config.get('openolyimageshare', 'download_dst')
+        if dst_relative:
+            download_dir = os.path.join(self.primary_ext_storage, download_dst)
+        else:
+            download_dir = download_dst
+        Logger.debug('DownloadDir: ExternalStorage: %s, Destination: %s, Relative: %s, DownloadDir: %s' % (self.primary_ext_storage, download_dst, dst_relative, download_dir))
+        return download_dir
 
 
 if __name__ == '__main__':
