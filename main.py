@@ -14,9 +14,11 @@ environment you should install the xclip and xsel tools
 """
 
 import hashlib
+import logging
 import os
 import requests
 import time
+from collections import deque
 from functools import partial
 from threading import Thread
 
@@ -48,11 +50,30 @@ __author__ = "Niccolo Rigacci"
 __copyright__ = "Copyright 2023-2025 Niccolo Rigacci <niccolo@rigacci.org>"
 __license__ = "GPLv3-or-later"
 __email__ = "niccolo@rigacci.org"
-__version__ = "0.38"
+__version__ = "0.41"
+
+
+class RingBufferHandler(logging.Handler):
+    """ Ring buffer to store the latest log messages """
+    def __init__(self, max_records=500):
+        super().__init__()
+        self.records = deque(maxlen=max_records)
+
+    def emit(self, record):
+        self.records.append(self.format(record))
+
+    def get_last(self, n=10):
+        return list(self.records)[-n:]
+
 
 # Set the loglevel. The Android log file will be create into
 # [app_home]/files/app/.kivy/logs/
-Logger.setLevel(LOG_LEVELS["debug"])
+Logger.setLevel(LOG_LEVELS['info'])
+
+# Add a log handler into the ring buffer.
+log_memory_handler = RingBufferHandler(max_records=500)
+log_memory_handler.setFormatter(logging.Formatter("[%(levelname)s] %(message)s"))
+Logger.addHandler(log_memory_handler)
 
 # Where Kivy creates log files in Android.
 ANDROID_KIVY_LOGS = 'files/app/.kivy/logs'
@@ -301,6 +322,7 @@ Builder.load_string("""
 """)
 
 
+
 def olympus_timestamp(date, time):
     """ Convert the Olympus integers tuple (date, time) into a timestamp """
     return f'{1980+(date>>9)}-{(date>>5)&15:02d}-{date&31:02d}T{time>>11:02d}:{(time>>5)&63:02d}:{2*(time&31):02d}'
@@ -386,7 +408,7 @@ class ConnectionScreen(Screen):
         """  """
         self.cfg = App.get_running_app().config
         url = 'http://%s%s' % (self.cfg.get('openolyimageshare', 'olympus_host'), GET_CAMINFO)
-        Logger.debug('Connection: Getting URL: "%s"' % (url,))
+        Logger.info('Connection: Getting URL: "%s"' % (url,))
         try:
             resp = requests.get(url, timeout=TIMEOUT_GET_COMMAND)
         except Exception as ex:
@@ -415,7 +437,11 @@ class AboutScreen(Screen):
     def on_enter(self):
         app = App.get_running_app()
         app_download_dir = app.app_download_dir()
-        self.ids.about_label.text = ABOUT_MSG % (app.primary_ext_storage, app_download_dir)
+        #self.ids.about_label.text = ABOUT_MSG % (app.primary_ext_storage, app_download_dir)
+        about = ABOUT_MSG % (app.primary_ext_storage, app_download_dir)
+        separator = '\n\n' + '='*40 + '\n\n'
+        latest_messages = '\n'.join(log_memory_handler.get_last(30))
+        self.ids.about_label.text = about + separator + latest_messages
 
 
 class ThumbnailsScreen(Screen):
@@ -492,7 +518,7 @@ class ThumbnailsScreen(Screen):
             Logger.error('Thumbnails: Error in response status code: %s' % (resp.status_code,))
         # Get the DCIM directory listing.
         url = 'http://%s%s?DIR=%s' % (self.cfg.get('openolyimageshare', 'olympus_host'), GET_IMGLIST, directory)
-        Logger.debug('Thumbnails: Getting URL: "%s"' % (url,))
+        Logger.info('Thumbnails: Getting URL: "%s"' % (url,))
         try:
             resp = requests.get(url, timeout=TIMEOUT_GET_IMGLIST)
         except Exception as ex:
@@ -501,7 +527,7 @@ class ThumbnailsScreen(Screen):
         if resp.status_code != 200:
             Logger.error('Thumbnails: Error in response status code: %s' % (resp.status_code,))
             return
-        #Logger.debug('resp.text: %s' % (resp.text,))
+        #Logger.info('resp.text: %s' % (resp.text,))
         # Response example:
         # VER_100
         # /DCIM,100OLYMP,0,16,22278,35850
@@ -552,7 +578,7 @@ class ThumbnailsScreen(Screen):
 
     def cache_purge_older(self):
         """ Delete cached thumbnails not touched for too many days """
-        Logger.debug('CachePurge: Cleaning older files in cache directory')
+        Logger.info('CachePurge: Cleaning older files in cache directory')
         for root, d_names, f_names in os.walk(self.cfg.get('openolyimageshare', 'cache_root')):
             for f in f_names:
                 filename = os.path.join(root, f)
@@ -563,7 +589,7 @@ class ThumbnailsScreen(Screen):
                         Logger.error('CachePurge: Exception getting mtime from "%s": %s' % (filename, ex))
                         continue
                     if age > (self.cfg.getint('openolyimageshare', 'max_cache_age_days') * 24 * 3600):
-                        Logger.debug('CachePurge: Purging file "%s"' % (filename,))
+                        Logger.info('CachePurge: Purging file "%s"' % (filename,))
                         try:
                             os.unlink(filename)
                         except Exception as ex:
@@ -574,7 +600,7 @@ class ThumbnailsScreen(Screen):
         """ Purge log files older than two weeks """
         if not os.path.exists(ANDROID_KIVY_LOGS):
             return
-        Logger.debug('LogsPurge: Cleaning older files in log directory')
+        Logger.info('LogsPurge: Cleaning older files in log directory')
         for root, d_names, f_names in os.walk(ANDROID_KIVY_LOGS):
             for f in f_names:
                 if f.startswith('kivy_') and f.endswith('.txt'):
@@ -657,7 +683,7 @@ class ThumbnailsScreen(Screen):
             Logger.error('ThumbnailsScreen: Exception creating directory "%s": %s' % (cache_subdir, ex))
             return None
         url = 'http://%s%s%s' % (self.cfg.get('openolyimageshare', 'olympus_host'), GET_THUMBNAIL, item[ITEM_KEY_FILENAME])
-        Logger.debug('Thumbnails: Getting URL: "%s"' % (url,))
+        Logger.info('Thumbnails: Getting URL: "%s"' % (url,))
         timestamp_now = time.strftime('%Y-%m-%dT%H:%M:%S')
         return self.wget_file(url, cache_filename, timestamp=timestamp_now, timeout=TIMEOUT_GET_THUMBNAIL)
 
@@ -779,8 +805,10 @@ class ThumbnailsScreen(Screen):
         try:
             os.makedirs(self.download_dir, exist_ok=True)
         except Exception as ex:
-            Logger.error('Download: Exception creating download directory "%s": %s' % (self.download_dir, ex))
+            msg = 'Exception creating download directory "%s": %s' % (self.download_dir, ex)
+            Logger.error('Download: ' + msg)
             self.progress_popup.dismiss()
+            Clock.schedule_once(partial(self.screen_popup, 'Error', msg))
             return
         Thread(target=self.download_loop).start()
 
@@ -817,7 +845,7 @@ class ThumbnailsScreen(Screen):
 
     def wget_file(self, url, dst_filename, timestamp=None, timeout=2.0):
         """ Get a file via the HTTP GET method """
-        Logger.debug('wget_file: Getting file: "%s" => "%s"' % (url, dst_filename))
+        Logger.info('wget_file: Getting file: "%s" => "%s"' % (url, dst_filename))
         if not os.path.exists(dst_filename):
             try:
                 resp = requests.get(url, timeout=timeout)
@@ -844,7 +872,7 @@ class ThumbnailsScreen(Screen):
 
     def download_file(self, url, dst_filename, timestamp=None, filesize=None, timeout=2.0):
         """ Download an HTTP file in chunks updating a progress bar """
-        Logger.debug('Download: Downloading file: "%s" => "%s"' % (url, dst_filename))
+        Logger.info('Download: Downloading file: "%s" => "%s"' % (url, dst_filename))
         photo_basename = os.path.basename(dst_filename)
         if os.path.exists(dst_filename):
             Logger.warning('Download: File already downloaded: "%s"' % (dst_filename,))
@@ -890,14 +918,14 @@ class ThumbnailsScreen(Screen):
                 # Show the error popup in the main Kivy thread.
                 Clock.schedule_once(partial(self.screen_popup, 'Download Error', 'File %s: downloaded size does not match size in camera listing.' % (photo_basename,)))
             else:
-                Logger.debug('Download: Downloaded file %s size OK: %d' % (dst_filename, downloaded_file_size))
+                Logger.info('Download: Downloaded file %s size OK: %d' % (dst_filename, downloaded_file_size))
         return dst_filename
 
 
     def update_progress(self, percent):
         self.progress_popup.progress_bar_file.value = percent
         if (percent % 10) == 0:
-            Logger.debug('Download: Downloaded %d%%)' % (percent,))
+            Logger.info('Download: Downloaded %d%%)' % (percent,))
 
 
 class MyApp(App):
@@ -985,10 +1013,12 @@ class MyApp(App):
         dst_relative = self.config.getboolean('openolyimageshare', 'download_dst_is_relative')
         download_dst = self.config.get('openolyimageshare', 'download_dst')
         if dst_relative:
+            if download_dst.startswith(os.path.sep):
+                download_dst = download_dst[1:]
             download_dir = os.path.join(self.primary_ext_storage, download_dst)
         else:
             download_dir = download_dst
-        Logger.debug('DownloadDir: ExternalStorage: %s, Destination: %s, Relative: %s, DownloadDir: %s' % (self.primary_ext_storage, download_dst, dst_relative, download_dir))
+        Logger.info('DownloadDir: ExternalStorage: %s, Destination: %s, Relative: %s, DownloadDir: %s' % (self.primary_ext_storage, download_dst, dst_relative, download_dir))
         return download_dir
 
 
