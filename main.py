@@ -50,7 +50,7 @@ __author__ = "Niccolo Rigacci"
 __copyright__ = "Copyright 2023-2025 Niccolo Rigacci <niccolo@rigacci.org>"
 __license__ = "GPLv3-or-later"
 __email__ = "niccolo@rigacci.org"
-__version__ = "0.41"
+__version__ = "0.42"
 
 
 class RingBufferHandler(logging.Handler):
@@ -133,7 +133,7 @@ GET_IMAGE     = '%s'
 # Timeouts for http requests (NOT the entire response download).
 TIMEOUT_GET_COMMAND = 1.0
 TIMEOUT_GET_IMGLIST = 2.0
-TIMEOUT_GET_THUMBNAIL = 0.5
+TIMEOUT_GET_THUMBNAIL = 0.8
 TIMEOUT_GET_FILE = 2.0
 
 # The "images_list" list contains lists with the following elements.
@@ -253,9 +253,8 @@ Builder.load_string("""
             Button:
                 font_name: 'fa-solid'
                 font_size: self.parent.font_size
-                text: root.FA_CAMERA
-                on_press: root.share_selected()
-                disabled: True
+                text: root.FA_TRASH
+                on_press: root.delete_selected()
             Button:
                 font_name: 'fa-solid'
                 font_size: self.parent.font_size
@@ -450,6 +449,7 @@ class ThumbnailsScreen(Screen):
     # Icons from FontAwesome, see https://fontawesome.com/search?o=r&m=free&s=solid
     FA_SQUARE        = '\uf0c8'
     FA_DOWNLOAD      = '\uf019'
+    FA_CAMERA        = '\uf030'
     FA_CHECK         = '\uf00c'
     FA_SQUARE_CHECK  = '\uf14a'
     FA_XMARK         = '\uf00d'
@@ -460,13 +460,12 @@ class ThumbnailsScreen(Screen):
     FA_ANGLE_RIGHT   = '\uf105'
     FA_FILM          = '\uf008'
     FA_CLAPPERBOARD  = '\ue131'
+    FA_SHARE_NODES   = '\uf1e0'
     FA_TRASH         = '\uf1f8'
     FA_BACKWARD_STEP = '\uf048'
     FA_FORWARD_STEP  = '\uf051'
     FA_BACKWARD_FAST = '\uf049'
     FA_FORWARD_FAST  = '\uf050'
-    FA_CAMERA        = '\uf030'
-    FA_SHARE_NODES   = '\uf1e0'
 
     cfg = None
     grid = None
@@ -522,10 +521,13 @@ class ThumbnailsScreen(Screen):
         try:
             resp = requests.get(url, timeout=TIMEOUT_GET_IMGLIST)
         except Exception as ex:
-            Logger.error('Thumbnails: Exception getting image list: %s' % (ex,))
+            msg = 'Exception getting image list: %s' % (ex,)
+            Logger.error('Thumbnails: ' + msg)
+            Clock.schedule_once(partial(self.screen_popup, 'Error', msg))
             return
         if resp.status_code != 200:
-            Logger.error('Thumbnails: Error in response status code: %s' % (resp.status_code,))
+            msg = 'Error in GET imagelist; response status code: %s' % (resp.status_code,)
+            Logger.error('Thumbnails: ' + msg)
             return
         #Logger.info('resp.text: %s' % (resp.text,))
         # Response example:
@@ -727,9 +729,13 @@ class ThumbnailsScreen(Screen):
             t.unselect()
 
 
-    def share_selected(self):
-        """ TODO: Implement a share method """
-        return
+    def delete_selected(self):
+        """ Ask confirmation before deletgin selected files """
+        selected = len(self.images_selected)
+        if selected > 0:
+            message = 'Ready to delete %d files...' % (selected,)
+            # Open a non blocking Popup (it returns while it is still open).
+            self.download_popup = myPopup(title='File Delete', message=message, buttons_text=['Cancel', 'OK'], callbacks=[None, self.delete_selected_confirmed])
 
 
     def download_selected(self):
@@ -813,6 +819,12 @@ class ThumbnailsScreen(Screen):
         Thread(target=self.download_loop).start()
 
 
+    def delete_selected_confirmed(self):
+        """ Show a progress Popup and start the file download loop in another thread """
+        # TODO: Implement the delete popup!
+        Thread(target=self.delete_loop).start()
+
+
     def download_loop(self):
         """ File download loop executed into a background thread, showing progress bar """
         count = 1
@@ -841,6 +853,12 @@ class ThumbnailsScreen(Screen):
         # The self.refresh_thumbnails_page() must not add or delete graphics
         # because here it is called it outside of the main Kivy thread.
         self.refresh_thumbnails_page()
+
+
+    def delete_loop(self):
+        """ File download loop executed into a background thread, showing progress bar """
+        # TODO: Implement the delete action!
+        self.progress_popup.dismiss()
 
 
     def wget_file(self, url, dst_filename, timestamp=None, timeout=2.0):
