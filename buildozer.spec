@@ -104,7 +104,7 @@ android.permissions = android.permission.INTERNET, android.permission.READ_EXTER
 
 # (int) Target Android API, should be as high as possible.
 # Default is: Requested API target 31 is available, continuing.
-android.api = 34
+android.api = 35
 
 # (int) Minimum API your APK / AAB will support.
 #android.minapi = 21
