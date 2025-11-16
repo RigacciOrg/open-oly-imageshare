@@ -50,7 +50,7 @@ __author__ = "Niccolo Rigacci"
 __copyright__ = "Copyright 2023-2025 Niccolo Rigacci <niccolo@rigacci.org>"
 __license__ = "GPLv3-or-later"
 __email__ = "niccolo@rigacci.org"
-__version__ = "0.42"
+__version__ = "0.43"
 
 
 class RingBufferHandler(logging.Handler):
