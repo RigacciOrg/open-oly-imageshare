@@ -32,6 +32,7 @@ from kivy.core.text import LabelBase
 from kivy.core.window import Window
 from kivy.lang import Builder
 from kivy.logger import Logger, LOG_LEVELS
+from kivy.metrics import dp
 from kivy.uix.behaviors import ButtonBehavior
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
@@ -310,14 +311,28 @@ Builder.load_string("""
     BoxLayout:
         id: about_content
         orientation: 'vertical'
-        BoxLayout:
-            padding: 8
+        padding: dp(6)
+        Label:
+            id: about_label
+            size_hint_y: None
+            halign: 'left'
+            valign: 'top'
+            text: ''
+            text_size: self.size
+        ScrollView:
+            id: scroll
+            do_scroll_x: False
+            do_scroll_y: True
+            bar_width: dp(8)
             Label:
-                id: about_label
-                text: ''
-                text_size: self.size
+                id: about_log
+                size_hint_y: None
                 halign: 'left'
                 valign: 'top'
+                text: ''
+                text_size: self.width, None
+                # The Label height changes as the contained text changes.
+                height: self.texture_size[1]
 
 """)
 
@@ -435,13 +450,21 @@ class AboutScreen(Screen):
     """ About screen """
 
     def on_enter(self):
+        """ Fill the About screen with app info and scrollable log messages """
         app = App.get_running_app()
         app_download_dir = app.app_download_dir()
-        #self.ids.about_label.text = ABOUT_MSG % (app.primary_ext_storage, app_download_dir)
         about = ABOUT_MSG % (app.primary_ext_storage, app_download_dir)
-        separator = '\n\n' + '='*40 + '\n\n'
-        latest_messages = '\n'.join(log_memory_handler.get_last(30))
-        self.ids.about_label.text = about + separator + latest_messages
+        about += '\n\n' + '='*40
+        latest_messages = '\n'.join(log_memory_handler.get_last(100))
+        num_lines = len(about.splitlines()) + 1
+        self.ids.about_label.text = about
+        self.ids.about_label.height = self.ids.about_label.font_size * 1.2 * num_lines
+        self.ids.about_log.text = latest_messages
+        def scroll_to_bottom(dt):
+            # Called after the label content has been updated and resized:
+            # scroll the content to the bottom.
+            self.ids.scroll.scroll_y = 0
+        Clock.schedule_once(scroll_to_bottom, 0)
 
 
 class ThumbnailsScreen(Screen):
