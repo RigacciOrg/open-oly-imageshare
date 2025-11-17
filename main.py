@@ -123,12 +123,13 @@ OLYMPUS_ATTRIB_SYSTEM    =  4
 OLYMPUS_ATTRIB_VOLUME    =  8
 OLYMPUS_ATTRIB_DIRECTORY = 16
 
-# Olympust WiFi API commands.
-GET_MODE_PLAY = '/switch_cammode.cgi?mode=play'
-GET_IMGLIST   = '/get_imglist.cgi'
-GET_THUMBNAIL = '/get_thumbnail.cgi?DIR='
-GET_CAMINFO   = '/get_caminfo.cgi'
-GET_IMAGE     = '%s'
+# Olympust Wi-Fi API commands.
+GET_MODE_PLAY  = '/switch_cammode.cgi?mode=play'
+GET_IMGLIST    = '/get_imglist.cgi'
+GET_THUMBNAIL  = '/get_thumbnail.cgi?DIR='
+GET_CAMINFO    = '/get_caminfo.cgi'
+GET_IMAGE      = '%s'
+GET_EXEC_ERASE = '/exec_erase.cgi?DIR='
 
 # Timeouts for http requests (NOT the entire response download).
 TIMEOUT_GET_COMMAND = 1.0
@@ -528,6 +529,7 @@ class ThumbnailsScreen(Screen):
         if resp.status_code != 200:
             msg = 'Error in GET imagelist; response status code: %s' % (resp.status_code,)
             Logger.error('Thumbnails: ' + msg)
+            Clock.schedule_once(partial(self.screen_popup, 'Error', msg))
             return
         #Logger.info('resp.text: %s' % (resp.text,))
         # Response example:
@@ -658,6 +660,7 @@ class ThumbnailsScreen(Screen):
 
     def refresh_thumbnails_page(self):
         """ Refresh the current thumbnails page and selections marks/count """
+        # TODO: Add some feedback that refresh is running.
         self.grid = self.ids.thumbnails_grid
         current_image = self.current_page * self.grid.rows * self.grid.cols
         for widget in self.grid.children:
@@ -821,7 +824,10 @@ class ThumbnailsScreen(Screen):
 
     def delete_selected_confirmed(self):
         """ Show a progress Popup and start the file download loop in another thread """
-        # TODO: Implement the delete popup!
+        msg_text = LABEL_FILE_COUNT_PROGRESS % (1, len(self.images_selected))
+        self.progress_popup = self.downloadPopup(on_cancel=self.cancel_download, title='Deleting...', content=Label(text=msg_text), auto_dismiss=False, size_hint=SIZE_HINT_DOWNLOAD_VERTICAL)
+        self.progress_popup.open()
+        # TODO: refactor downloadPopup() to be dual use: download and delete.
         Thread(target=self.delete_loop).start()
 
 
@@ -851,14 +857,51 @@ class ThumbnailsScreen(Screen):
                 break
         self.progress_popup.dismiss()
         # The self.refresh_thumbnails_page() must not add or delete graphics
-        # because here it is called it outside of the main Kivy thread.
+        # because here it is called outside of the main Kivy thread.
         self.refresh_thumbnails_page()
 
 
     def delete_loop(self):
-        """ File download loop executed into a background thread, showing progress bar """
-        # TODO: Implement the delete action!
+        """ File delete loop executed into a background thread, showing progress bar """
+        count = 1
+        count_tot = len(self.images_selected)
+        self.download_cancel_requested = False
+        for img in self.images_list:
+            dcim_path = img[ITEM_KEY_FILENAME]
+            if dcim_path in self.images_selected:
+                Logger.info('Delete: Deleting %s' % (dcim_path,))
+                count_percent = int((count - 1) * 100 / count_tot)
+                self.progress_popup.message.text = LABEL_FILE_COUNT_PROGRESS % (count, count_tot)
+                self.progress_popup.progress_bar_count.value = count_percent
+                url = 'http://%s%s%s' % (self.cfg.get('openolyimageshare', 'olympus_host'), GET_EXEC_ERASE, dcim_path)
+                # TODO: Implement the delete action!
+                Logger.info('Delete: Getting URL: "%s"' % (url,))
+                erase_failed = False
+                try:
+                    resp = requests.get(url, timeout=TIMEOUT_GET_COMMAND)
+                except Exception as ex:
+                    msg = 'Exception erasing image: %s' % (ex,)
+                    Logger.error('Delete: ' + msg)
+                    Clock.schedule_once(partial(self.screen_popup, 'Error', msg))
+                    erase_failed = True
+                if resp.status_code != 200:
+                    msg = 'Error in GET exec erase; response status code: %s' % (resp.status_code,)
+                    Logger.error('Delete: ' + msg)
+                    Clock.schedule_once(partial(self.screen_popup, 'Error', msg))
+                    erase_failed = True
+                if erase_failed:
+                    self.download_cancel_requested = True
+                else:
+                    count += 1
+                    del self.images_selected[dcim_path]
+                # Update the selection counter.
+                self.ids.lbl_selection.text = LABEL_SELECTION % (len(self.images_selected), len(self.images_list))
+            if self.download_cancel_requested:
+                break
         self.progress_popup.dismiss()
+        # The self.refresh_thumbnails_page() must not add or delete graphics
+        # because here it is called outside of the main Kivy thread.
+        self.refresh_thumbnails_page()
 
 
     def wget_file(self, url, dst_filename, timestamp=None, timeout=2.0):
