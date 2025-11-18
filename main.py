@@ -56,7 +56,7 @@ __version__ = "0.44"
 
 class RingBufferHandler(logging.Handler):
     """ Ring buffer to store the latest log messages """
-    def __init__(self, max_records=500):
+    def __init__(self, max_records=100):
         super().__init__()
         self.records = deque(maxlen=max_records)
 
@@ -72,7 +72,7 @@ class RingBufferHandler(logging.Handler):
 Logger.setLevel(LOG_LEVELS['info'])
 
 # Add a log handler into the ring buffer.
-log_memory_handler = RingBufferHandler(max_records=500)
+log_memory_handler = RingBufferHandler(max_records=110)
 log_memory_handler.setFormatter(logging.Formatter("[%(levelname)s] %(message)s"))
 Logger.addHandler(log_memory_handler)
 
