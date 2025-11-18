@@ -51,7 +51,7 @@ __author__ = "Niccolo Rigacci"
 __copyright__ = "Copyright 2023-2025 Niccolo Rigacci <niccolo@rigacci.org>"
 __license__ = "GPLv3-or-later"
 __email__ = "niccolo@rigacci.org"
-__version__ = "0.43"
+__version__ = "0.44"
 
 
 class RingBufferHandler(logging.Handler):
@@ -132,11 +132,11 @@ GET_CAMINFO    = '/get_caminfo.cgi'
 GET_IMAGE      = '%s'
 GET_EXEC_ERASE = '/exec_erase.cgi?DIR='
 
-# Timeouts for http requests (NOT the entire response download).
+# Timeouts for each http request, NOT the entire response download.
 TIMEOUT_GET_COMMAND = 1.0
-TIMEOUT_GET_IMGLIST = 2.0
-TIMEOUT_GET_THUMBNAIL = 0.8
-TIMEOUT_GET_FILE = 2.0
+TIMEOUT_GET_IMGLIST = 5.0
+TIMEOUT_GET_THUMBNAIL = 2.0
+TIMEOUT_GET_FILE = 10.0      # For each chunk in stream read.
 
 # The "images_list" list contains lists with the following elements.
 ITEM_KEY_FILENAME  = 0
@@ -975,7 +975,7 @@ class ThumbnailsScreen(Screen):
         return dst_filename
 
 
-    def download_file(self, url, dst_filename, timestamp=None, filesize=None, timeout=2.0):
+    def download_file(self, url, dst_filename, timestamp=None, filesize=None, timeout=5.0):
         """ Download an HTTP file in chunks updating a progress bar """
         Logger.info('Download: Downloading file: "%s" => "%s"' % (url, dst_filename))
         photo_basename = os.path.basename(dst_filename)
