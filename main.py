@@ -889,6 +889,7 @@ class ThumbnailsScreen(Screen):
         count = 1
         count_tot = len(self.images_selected)
         self.download_cancel_requested = False
+        deleted_list = []
         for img in self.images_list:
             dcim_path = img[ITEM_KEY_FILENAME]
             if dcim_path in self.images_selected:
@@ -898,7 +899,7 @@ class ThumbnailsScreen(Screen):
                 self.progress_popup.progress_bar_count.value = count_percent
                 url = 'http://%s%s%s' % (self.cfg.get('openolyimageshare', 'olympus_host'), GET_EXEC_ERASE, dcim_path)
                 # TODO: Implement the delete action!
-                Logger.info('Delete: Getting URL: "%s"' % (url,))
+                Logger.info('Delete: Requesting URL: "%s"' % (url,))
                 erase_failed = False
                 try:
                     resp = requests.get(url, timeout=TIMEOUT_GET_COMMAND)
@@ -917,14 +918,22 @@ class ThumbnailsScreen(Screen):
                 else:
                     count += 1
                     del self.images_selected[dcim_path]
+                    deleted_list.append(img)
                 # Update the selection counter.
+                # TODO: Decrement the total count of self.images_list.
                 self.ids.lbl_selection.text = LABEL_SELECTION % (len(self.images_selected), len(self.images_list))
             if self.download_cancel_requested:
                 break
+        # Remove erased photos from the self.images_list; must do it outside the iteration.
+        for deleted in deleted_list:
+            self.images_list.remove(deleted)
         self.progress_popup.dismiss()
-        # The self.refresh_thumbnails_page() must not add or delete graphics
+        # The self.fill_thumbnails_page() must not add or delete graphics
         # because here it is called outside of the main Kivy thread.
-        self.refresh_thumbnails_page()
+        Logger.info('Filling the thumbnails page again')
+        # TODO: How to remove the p=12 statement?
+        # TODO: What if the numer of pages is decreased?
+        Clock.schedule_once(lambda dt, p=12: self.fill_thumbnails_page())
 
 
     def wget_file(self, url, dst_filename, timestamp=None, timeout=2.0):
