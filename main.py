@@ -644,7 +644,8 @@ class ThumbnailsScreen(Screen):
 
 
     def fill_thumbnails_page(self):
-        """ Fill the thumbnails page starting at current page """
+        """ Fill the thumbnails page starting at self.current_page """
+        # TODO: Add feedback that filling page is running, e.g. an hourglass above the grid.
         mark_size = self.cfg.getint('openolyimageshare', 'icon_size_top')
         self.grid = self.ids.thumbnails_grid
         self.grid.clear_widgets()
@@ -678,12 +679,11 @@ class ThumbnailsScreen(Screen):
                 self.thumbs_widgets_list.append(img)
                 current_image += 1
         self.ids.lbl_selection.text = LABEL_SELECTION % (len(self.images_selected), len(self.images_list))
-        # TODO: Create and refresh the page counter.
+        # TODO: Create and refresh a page counter.
 
 
     def refresh_thumbnails_page(self):
         """ Refresh the current thumbnails page and selections marks/count """
-        # TODO: Add some feedback that refresh is running.
         self.grid = self.ids.thumbnails_grid
         current_image = self.current_page * self.grid.rows * self.grid.cols
         for widget in self.grid.children:
@@ -694,7 +694,7 @@ class ThumbnailsScreen(Screen):
                 img.unselect()
             current_image += 1
         self.ids.lbl_selection.text = LABEL_SELECTION % (len(self.images_selected), len(self.images_list))
-        # TODO: Create and refresh the page counter.
+        # TODO: Create and refresh a page counter.
 
 
     def cache_thumbnail(self, item):
@@ -723,10 +723,12 @@ class ThumbnailsScreen(Screen):
         self.ids.btn_forward.disabled = True
         self.ids.btn_fforward.disabled = True
         last_page = (len(self.images_list) - 1) // (self.grid.rows * self.grid.cols)
-        self.current_page += count
-        if self.current_page > last_page:
-            self.current_page = last_page
-        self.fill_thumbnails_page()
+        current_page_new = self.current_page + count
+        if current_page_new > last_page:
+            current_page_new = last_page
+        if current_page_new != self.current_page:
+            self.current_page = current_page_new
+            self.fill_thumbnails_page()
         self.ids.btn_forward.disabled = False
         self.ids.btn_fforward.disabled = False
 
@@ -737,10 +739,12 @@ class ThumbnailsScreen(Screen):
             return
         self.ids.btn_backward.disabled = True
         self.ids.btn_fbackward.disabled = True
-        self.current_page -= count
-        if self.current_page < 0:
-            self.current_page = 0
-        self.fill_thumbnails_page()
+        current_page_new = self.current_page - count
+        if current_page_new < 0:
+            current_page_new = 0
+        if current_page_new != self.current_page:
+            self.current_page = current_page_new
+            self.fill_thumbnails_page()
         self.ids.btn_backward.disabled = False
         self.ids.btn_fbackward.disabled = False
 
@@ -778,7 +782,8 @@ class ThumbnailsScreen(Screen):
         myPopup(title=title, message=message, buttons_text=['Cancel'], callbacks=[None])
 
 
-    class downloadPopup(Popup):
+    class progressPopup(Popup):
+        """ A Popup to show progress on file operations, e.g. download or delete """
 
         def __init__(self, on_cancel=None, **kwargs):
             super().__init__(**kwargs)
@@ -832,7 +837,7 @@ class ThumbnailsScreen(Screen):
         # Also the Popup.open() must be called here, otherwise the error:
         # "Cannot change graphics instruction outside the main Kivy thread".
         msg_text = LABEL_FILE_COUNT_PROGRESS % (1, len(self.images_selected))
-        self.progress_popup = self.downloadPopup(on_cancel=self.cancel_download, title='Downloading...', content=Label(text=msg_text), auto_dismiss=False, size_hint=SIZE_HINT_DOWNLOAD_VERTICAL)
+        self.progress_popup = self.progressPopup(on_cancel=self.cancel_download, title='Downloading...', content=Label(text=msg_text), auto_dismiss=False, size_hint=SIZE_HINT_DOWNLOAD_VERTICAL)
         self.progress_popup.open()
         try:
             os.makedirs(self.download_dir, exist_ok=True)
@@ -848,9 +853,8 @@ class ThumbnailsScreen(Screen):
     def delete_selected_confirmed(self):
         """ Show a progress Popup and start the file download loop in another thread """
         msg_text = LABEL_FILE_COUNT_PROGRESS % (1, len(self.images_selected))
-        self.progress_popup = self.downloadPopup(on_cancel=self.cancel_download, title='Deleting...', content=Label(text=msg_text), auto_dismiss=False, size_hint=SIZE_HINT_DOWNLOAD_VERTICAL)
+        self.progress_popup = self.progressPopup(on_cancel=self.cancel_download, title='Deleting...', content=Label(text=msg_text), auto_dismiss=False, size_hint=SIZE_HINT_DOWNLOAD_VERTICAL)
         self.progress_popup.open()
-        # TODO: refactor downloadPopup() to be dual use: download and delete.
         Thread(target=self.delete_loop).start()
 
 
@@ -885,20 +889,22 @@ class ThumbnailsScreen(Screen):
 
 
     def delete_loop(self):
-        """ File delete loop executed into a background thread, showing progress bar """
-        count = 1
-        count_tot = len(self.images_selected)
-        self.download_cancel_requested = False
+        """ Photos delete loop executed into a background thread, showing a progress bar """
+        delete_count = 0
         deleted_list = []
+        count_tot = len(self.images_selected)
+        last_image_in_page = ((self.current_page + 1) * self.grid.rows * self.grid.cols) - 1
+        current_page_new = self.current_page
+        image_index = 0
+        self.download_cancel_requested = False
         for img in self.images_list:
             dcim_path = img[ITEM_KEY_FILENAME]
             if dcim_path in self.images_selected:
                 Logger.info('Delete: Deleting %s' % (dcim_path,))
-                count_percent = int((count - 1) * 100 / count_tot)
-                self.progress_popup.message.text = LABEL_FILE_COUNT_PROGRESS % (count, count_tot)
+                count_percent = int(delete_count * 100 / count_tot)
+                self.progress_popup.message.text = LABEL_FILE_COUNT_PROGRESS % (delete_count+1, count_tot)
                 self.progress_popup.progress_bar_count.value = count_percent
                 url = 'http://%s%s%s' % (self.cfg.get('openolyimageshare', 'olympus_host'), GET_EXEC_ERASE, dcim_path)
-                # TODO: Implement the delete action!
                 Logger.info('Delete: Requesting URL: "%s"' % (url,))
                 erase_failed = False
                 try:
@@ -913,32 +919,38 @@ class ThumbnailsScreen(Screen):
                     Logger.error('Delete: ' + msg)
                     Clock.schedule_once(partial(self.screen_popup, 'Error', msg))
                     erase_failed = True
+                # Simulate a slow Wi-Fi connection.
+                if SIMULATE_SLOW_WIFI:
+                    time.sleep(0.5)
                 if erase_failed:
                     self.download_cancel_requested = True
                 else:
-                    count += 1
-                    del self.images_selected[dcim_path]
+                    delete_count += 1
                     deleted_list.append(img)
+                    del self.images_selected[dcim_path]
                 # Update the selection counter.
-                # TODO: Decrement the total count of self.images_list.
-                self.ids.lbl_selection.text = LABEL_SELECTION % (len(self.images_selected), len(self.images_list))
+                self.ids.lbl_selection.text = LABEL_SELECTION % (len(self.images_selected), len(self.images_list) - delete_count)
+            if image_index <= last_image_in_page:
+                # Calculate a new current page upon deleted photos.
+                image_index_new = max(0, image_index - delete_count)
+                current_page_new = int(image_index_new / (self.grid.rows * self.grid.cols))
+                Logger.info('NewIndex: Current page: %02d, Last in page: %03d, Index: %03d, New index: %03d, Deleted: %03d, New current page: %02d' % (self.current_page, last_image_in_page, image_index, image_index_new, len(deleted_list), current_page_new))
             if self.download_cancel_requested:
                 break
-        # Remove erased photos from the self.images_list; must do it outside the iteration.
+            image_index += 1
+        # Remove erased photos from the self.images_list (do it outside the iteration).
         for deleted in deleted_list:
             self.images_list.remove(deleted)
+        self.current_page = current_page_new
         self.progress_popup.dismiss()
-        # The self.fill_thumbnails_page() must not add or delete graphics
-        # because here it is called outside of the main Kivy thread.
-        Logger.info('Filling the thumbnails page again')
-        # TODO: How to remove the p=12 statement?
-        # TODO: What if the numer of pages is decreased?
-        Clock.schedule_once(lambda dt, p=12: self.fill_thumbnails_page())
+        # Schedule the self.fill_thumbnails_page() in the main/UI thread, to avoid the
+        # TypeError: Cannot change graphics instruction outside the main Kivy thread
+        Clock.schedule_once(lambda dt: self.fill_thumbnails_page())
 
 
     def wget_file(self, url, dst_filename, timestamp=None, timeout=2.0):
         """ Get a file via the HTTP GET method """
-        Logger.info('wget_file: Getting file: "%s" => "%s"' % (url, dst_filename))
+        Logger.debug('wget_file: Getting file: "%s" => "%s"' % (url, dst_filename))
         if not os.path.exists(dst_filename):
             try:
                 resp = requests.get(url, timeout=timeout)
