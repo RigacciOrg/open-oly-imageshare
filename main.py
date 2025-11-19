@@ -535,10 +535,15 @@ class ThumbnailsScreen(Screen):
         try:
             resp = requests.get(url, timeout=TIMEOUT_GET_COMMAND)
         except Exception as ex:
-            Logger.error('Thumbnails: Exception switching camera mode to play: %s' % (ex,))
+            msg = 'Exception switching camera mode to play: %s' % (ex,)
             resp = None
         if resp is not None and resp.status_code != 200:
-            Logger.error('Thumbnails: Error in response status code: %s' % (resp.status_code,))
+            msg = 'Error in response status code: %s' % (resp.status_code,)
+            resp = None
+        if resp is None:
+            Logger.error('Thumbnails: ' + msg)
+            Clock.schedule_once(partial(self.screen_popup, 'Error', msg))
+            return
         # Get the DCIM directory listing.
         url = 'http://%s%s?DIR=%s' % (self.cfg.get('openolyimageshare', 'olympus_host'), GET_IMGLIST, directory)
         Logger.info('Thumbnails: Getting URL: "%s"' % (url,))
@@ -546,11 +551,11 @@ class ThumbnailsScreen(Screen):
             resp = requests.get(url, timeout=TIMEOUT_GET_IMGLIST)
         except Exception as ex:
             msg = 'Exception getting image list: %s' % (ex,)
-            Logger.error('Thumbnails: ' + msg)
-            Clock.schedule_once(partial(self.screen_popup, 'Error', msg))
-            return
-        if resp.status_code != 200:
+            resp = None
+        if resp is not None and resp.status_code != 200:
             msg = 'Error in GET imagelist; response status code: %s' % (resp.status_code,)
+            resp = None
+        if resp is None:
             Logger.error('Thumbnails: ' + msg)
             Clock.schedule_once(partial(self.screen_popup, 'Error', msg))
             return
