@@ -51,7 +51,7 @@ __author__ = "Niccolo Rigacci"
 __copyright__ = "Copyright 2023-2025 Niccolo Rigacci <niccolo@rigacci.org>"
 __license__ = "GPLv3-or-later"
 __email__ = "niccolo@rigacci.org"
-__version__ = "0.44"
+__version__ = "0.45"
 
 
 class RingBufferHandler(logging.Handler):
@@ -228,84 +228,102 @@ Builder.load_string("""
                 valign: 'top'
 
 <ThumbnailsScreen>:
-    GridLayout:
-        rows: 3
-        cols: 1
-        BoxLayout:
-            id: top_buttons
-            font_size: 42
-            size_hint: 1.0, 0.10
-            Button:
-                font_name: 'fa-solid'
-                font_size: self.parent.font_size
-                text: root.FA_ARROW_LEFT
-                on_press:
-                    root.manager.transition.direction = 'right'
-                    root.manager.current = 'menu'
-            Button:
-                font_name: 'fa-solid'
-                font_size: self.parent.font_size
-                text: root.FA_CHECK
-                on_press: root.page_select_all()
-            Button:
-                font_name: 'fa-solid'
-                font_size: self.parent.font_size
-                text: root.FA_XMARK
-                on_press: root.page_unselect_all()
-            Button:
-                font_name: 'fa-solid'
-                font_size: self.parent.font_size
-                text: root.FA_TRASH
-                on_press: root.delete_selected()
-            Button:
-                font_name: 'fa-solid'
-                font_size: self.parent.font_size
-                text: root.FA_DOWNLOAD
-                on_press: root.download_selected()
+    FloatLayout:
         GridLayout:
-            size_hint: 1.0, 0.85
-            id: thumbnails_grid
-            rows: 6
-            cols: 4
-            spacing: 6
-            padding: 6
-        BoxLayout:
-            id: bottom_buttons
-            font_size: 32
-            size_hint: 1.0, 0.05
-            Button:
-                id: btn_backward
-                size_hint: 0.15, 1.0
-                on_press: root.backward()
-                font_name: 'fa-solid'
-                font_size: self.parent.font_size
-                text: root.FA_ANGLE_LEFT
-            Button:
-                id: btn_fbackward
-                size_hint: 0.15, 1.0
-                on_press: root.backward(5)
-                font_name: 'fa-solid'
-                font_size: self.parent.font_size
-                text: root.FA_ANGLES_LEFT
-            Label:
-                size_hint: 0.40, 1.0
-                id: lbl_selection
-                font_size: self.parent.font_size
-                text: ''
-            Button:
-                id: btn_fforward
-                size_hint: 0.15, 1.0
-                on_press: root.forward(5)
-                font_name: 'fa-solid'
-                font_size: self.parent.font_size
-                text: root.FA_ANGLES_RIGHT
-            Button:
-                id: btn_forward
-                size_hint: 0.15, 1.0
-                on_press: root.forward()
-                font_name: 'fa-solid'
-                font_size: self.parent.font_size
-                text: root.FA_ANGLE_RIGHT
+            rows: 3
+            cols: 1
+            BoxLayout:
+                id: top_buttons
+                font_size: 42
+                size_hint: 1.0, 0.10
+                Button:
+                    font_name: 'fa-solid'
+                    font_size: self.parent.font_size
+                    text: root.FA_ARROW_LEFT
+                    on_press:
+                        root.manager.transition.direction = 'right'
+                        root.manager.current = 'menu'
+                Button:
+                    font_name: 'fa-solid'
+                    font_size: self.parent.font_size
+                    text: root.FA_CHECK
+                    on_press: root.page_select_all()
+                Button:
+                    font_name: 'fa-solid'
+                    font_size: self.parent.font_size
+                    text: root.FA_XMARK
+                    on_press: root.page_unselect_all()
+                Button:
+                    font_name: 'fa-solid'
+                    font_size: self.parent.font_size
+                    text: root.FA_TRASH
+                    on_press: root.delete_selected()
+                Button:
+                    font_name: 'fa-solid'
+                    font_size: self.parent.font_size
+                    text: root.FA_DOWNLOAD
+                    on_press: root.download_selected()
+            GridLayout:
+                size_hint: 1.0, 0.85
+                id: thumbnails_grid
+                rows: 6
+                cols: 4
+                spacing: 6
+                padding: 6
+            BoxLayout:
+                id: bottom_buttons
+                font_size: 32
+                size_hint: 1.0, 0.05
+                Button:
+                    id: btn_backward
+                    size_hint: 0.15, 1.0
+                    on_press: root.backward()
+                    font_name: 'fa-solid'
+                    font_size: self.parent.font_size
+                    text: root.FA_ANGLE_LEFT
+                Button:
+                    id: btn_fbackward
+                    size_hint: 0.15, 1.0
+                    on_press: root.backward(5)
+                    font_name: 'fa-solid'
+                    font_size: self.parent.font_size
+                    text: root.FA_ANGLES_LEFT
+                Label:
+                    size_hint: 0.40, 1.0
+                    id: lbl_selection
+                    font_size: self.parent.font_size
+                    text: ''
+                Button:
+                    id: btn_fforward
+                    size_hint: 0.15, 1.0
+                    on_press: root.forward(5)
+                    font_name: 'fa-solid'
+                    font_size: self.parent.font_size
+                    text: root.FA_ANGLES_RIGHT
+                Button:
+                    id: btn_forward
+                    size_hint: 0.15, 1.0
+                    on_press: root.forward()
+                    font_name: 'fa-solid'
+                    font_size: self.parent.font_size
+                    text: root.FA_ANGLE_RIGHT
+        HourglassOverlay:
+            id: hourglass
+            size_hint: 1, 1
+            disabled: False
+            opacity: 0
+            canvas.before:
+                Color:
+                    rgba: (0.4, 0.4, 0.4, 0.5)
+                Rectangle:
+                    pos: self.pos
+                    size: self.size
+            Image:
+                source: 'res/img/hourglass.png'
+                size_hint: 1, 1
+                allow_stretch: True
+                pos: hourglass.pos
+                size: hourglass.size
 
 <AboutScreen>:
     BoxLayout:
@@ -375,6 +393,17 @@ def myPopup(title='Popup Title', message='Popup message.', buttons_text=['Cancel
     for b in buttons:
         b.bind(on_press=btn_callback)
     popup.open()
+
+
+class HourglassOverlay(Widget):
+    """ Overlay that shows an hourglass and blocks the underlying widgets """
+    # Return True to block all the touches.
+    def on_touch_down(self, touch):
+        return self.disabled
+    def on_touch_move(self, touch):
+        return self.disabled
+    def on_touch_up(self, touch):
+        return self.disabled
 
 
 class MenuScreen(Screen):
@@ -545,6 +574,16 @@ class ThumbnailsScreen(Screen):
         myPopup(title=title, message=message, buttons_text=['Cancel'], callbacks=[None])
 
 
+    def hourglass_set(self, visible=True):
+        print('toggle_hourglass()')
+        if visible:
+            self.ids.hourglass.disabled = True
+            self.ids.hourglass.opacity = 1.0
+        else:
+            self.ids.hourglass.disabled = False
+            self.ids.hourglass.opacity = 0.0
+
+
     def on_pre_enter(self):
         """ Initialize the images list and create directories """
         app = App.get_running_app()
@@ -697,7 +736,10 @@ class ThumbnailsScreen(Screen):
 
     def fill_thumbnails_page(self):
         """ Fill the thumbnails page starting at self.current_page """
-        # TODO: Add feedback that filling page is running, e.g. an hourglass above the grid.
+        # This run in the main thread, it is blocking and it should complete quickly.
+        # To load the actual thumbnails (slow task) a sub-thread will be executed
+        # while the hourglass is visible.
+        Clock.schedule_once(lambda dt: self.hourglass_set(visible=True))
         mark_size = self.cfg.getint('openolyimageshare', 'icon_size_top')
         self.grid = self.ids.thumbnails_grid
         self.grid.clear_widgets()
@@ -708,17 +750,18 @@ class ThumbnailsScreen(Screen):
         for i in range(self.grid.rows):
             for j in range(self.grid.cols):
                 if current_image >= len(self.images_list):
-                    thumbnail_image_source = BLANK_IMAGE
+                    # No more thumbnails in page, fill with empty images.
                     dcim_path = None
+                    img_data = None
                 else:
-                    thumbnail_image_source = self.cache_thumbnail(self.images_list[current_image])
                     dcim_path = self.images_list[current_image][ITEM_KEY_FILENAME]
-                    if thumbnail_image_source is None or not os.path.exists(thumbnail_image_source):
-                        thumbnail_image_source = BROKEN_IMAGE
+                    img_data = self.images_list[current_image]
                 thumb = FloatLayout()
-                img = self.ImageButton(source=thumbnail_image_source, pos_hint={'x': 0, 'y': 0}, size_hint=(1, 1), allow_stretch=True, keep_ratio=True)
+                # Prepare the empty thumbnail placeholder, it will be filled later.
+                img = self.ImageButton(source=BLANK_IMAGE, pos_hint={'x': 0, 'y': 0}, size_hint=(1, 1), allow_stretch=True, keep_ratio=True)
                 img.thumbs_screen = self
                 img.dcim_path = dcim_path
+                img.img_data = img_data
                 img.markshadow = Label(font_name='fa-solid', font_size=int(mark_size*1.25), color=(0,0,0,0.6), bold=True, halign='left', valign='middle', pos_hint={'x': 0.35, 'y': 0.35})
                 img.mark = Label(font_name='fa-solid', font_size=mark_size, color=(1,1,0,1), bold=True, halign='left', valign='middle', pos_hint={'x': 0.35, 'y': 0.35})
                 if img.dcim_path in self.images_selected:
@@ -731,11 +774,29 @@ class ThumbnailsScreen(Screen):
                 self.thumbs_widgets_list.append(img)
                 current_image += 1
         self.ids.lbl_selection.text = LABEL_SELECTION % (len(self.images_selected), len(self.images_list))
-        # TODO: Create and refresh a page counter.
+        # TODO: Display a page counter.
+        Thread(target=self.set_thumbnails_source_all).start()
 
 
-    def refresh_thumbnails_page(self):
-        """ Refresh the current thumbnails page and selections marks/count """
+    def set_thumbnails_source_all(self):
+        """ Slow task for setting all thumbnail images; should be executed in a separate thread """
+        for img in self.thumbs_widgets_list:
+            if img.img_data is not None:
+                img_source = self.cache_thumbnail(img.img_data)
+                Clock.schedule_once(partial(self.set_thumbnail_source, img))
+        Clock.schedule_once(lambda dt: self.hourglass_set(visible=False))
+
+
+    def set_thumbnail_source(self, thumb, dt):
+        """ Set a single thumbnail by feeding and/or drawing from cache """
+        thumbnail_image_source = self.cache_thumbnail(thumb.img_data)
+        if thumbnail_image_source is None or not os.path.exists(thumbnail_image_source):
+            thumbnail_image_source = BROKEN_IMAGE
+        thumb.source = thumbnail_image_source
+
+
+    def refresh_thumbnails_selection(self):
+        """ Refresh the selection markers and counter in the thumbnails page """
         self.grid = self.ids.thumbnails_grid
         current_image = self.current_page * self.grid.rows * self.grid.cols
         for widget in self.grid.children:
@@ -746,11 +807,11 @@ class ThumbnailsScreen(Screen):
                 img.unselect()
             current_image += 1
         self.ids.lbl_selection.text = LABEL_SELECTION % (len(self.images_selected), len(self.images_list))
-        # TODO: Create and refresh a page counter.
 
 
     def cache_thumbnail(self, item):
-        """ Download one thumbnail from the camera and cache it """
+        """ Download one thumbnail from the camera and cache it. Return the filename path """
+        camera_host = self.cfg.get('openolyimageshare', 'olympus_host')
         # Calculate an MD5 (truncated) hash for the item.
         hash_seed = '%s-%d-%s' % (item[ITEM_KEY_FILENAME], item[ITEM_KEY_SIZE], item[ITEM_KEY_TIMESTAMP])
         md5_hash = hashlib.md5(hash_seed.encode('utf-8')).hexdigest()[0:16]
@@ -762,10 +823,11 @@ class ThumbnailsScreen(Screen):
         except Exception as ex:
             Logger.error('ThumbnailsScreen: Exception creating directory "%s": %s' % (cache_subdir, ex))
             return None
-        url = 'http://%s%s%s' % (self.cfg.get('openolyimageshare', 'olympus_host'), GET_THUMBNAIL, item[ITEM_KEY_FILENAME])
+        url = 'http://%s%s%s' % (camera_host, GET_THUMBNAIL, item[ITEM_KEY_FILENAME])
         Logger.info('Thumbnails: Getting URL: "%s"' % (url,))
         timestamp_now = time.strftime('%Y-%m-%dT%H:%M:%S')
-        return self.wget_file(url, cache_filename, timestamp=timestamp_now, timeout=TIMEOUT_GET_THUMBNAIL)
+        cached_file = self.wget_file(url, cache_filename, timestamp=timestamp_now, timeout=TIMEOUT_GET_THUMBNAIL)
+        return cached_file
 
 
     def forward(self, count=1):
@@ -888,9 +950,9 @@ class ThumbnailsScreen(Screen):
             if self.progress_cancel_requested:
                 break
         self.progress_popup.dismiss()
-        # The self.refresh_thumbnails_page() must not add or delete graphics
+        # The self.refresh_thumbnails_selection() must not add or delete graphics
         # because here it is called outside of the main Kivy thread.
-        self.refresh_thumbnails_page()
+        self.refresh_thumbnails_selection()
 
 
     def delete_loop(self):
@@ -927,7 +989,7 @@ class ThumbnailsScreen(Screen):
                     erase_failed = True
                 # Simulate a slow Wi-Fi connection.
                 if camera_host == '127.0.0.1' and SIMULATE_SLOW_WIFI_ON_LOCALHOST:
-                    time.sleep(0.5)
+                    time.sleep(0.3)
                 if erase_failed:
                     self.progress_cancel_requested = True
                 else:
@@ -955,7 +1017,7 @@ class ThumbnailsScreen(Screen):
 
 
     def wget_file(self, url, dst_filename, timestamp=None, timeout=2.0):
-        """ Get a file via the HTTP GET method """
+        """ If not alread downloaded, get a file from the url and save to dst_filename """
         Logger.debug('wget_file: Getting file: "%s" => "%s"' % (url, dst_filename))
         if not os.path.exists(dst_filename):
             try:
@@ -978,6 +1040,10 @@ class ThumbnailsScreen(Screen):
             if dst_filename is not None and timestamp is not None:
                 mtime_epoch = int(time.mktime(time.strptime(timestamp, '%Y-%m-%dT%H:%M:%S')))
                 os.utime(dst_filename, (mtime_epoch, mtime_epoch))
+        else:
+            camera_host = self.cfg.get('openolyimageshare', 'olympus_host')
+            if camera_host == '127.0.0.1' and SIMULATE_SLOW_WIFI_ON_LOCALHOST:
+                time.sleep(0.03)
         return dst_filename
 
 
