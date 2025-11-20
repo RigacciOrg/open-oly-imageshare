@@ -99,7 +99,7 @@ DOWNLOAD_DST_IS_RELATIVE = 1
 # Olympus WiFi access point mode defaul IP address.
 OLYMPUS_HOST = '192.168.0.10'
 # Add a delay downloading from OLYMPUS_HOST, for testing.
-SIMULATE_SLOW_WIFI = False
+SIMULATE_SLOW_WIFI_ON_LOCALHOST = True
 
 # Message displayed if connection check fails.
 CONNECT_HINT = '\n\n------\n\n   On the Olympus camera select "Connection to Smartphone" from the Playback Menu, then connect this device to the WiFi network displayed on the camera screen.\nNOTICE: On Android you may need to disable Mobile data to allow communication with the camera IP address.'
@@ -337,7 +337,6 @@ Builder.load_string("""
 """)
 
 
-
 def olympus_timestamp(date, time):
     """ Convert the Olympus integers tuple (date, time) into a timestamp """
     return f'{1980+(date>>9)}-{(date>>5)&15:02d}-{date&31:02d}T{time>>11:02d}:{(time>>5)&63:02d}:{2*(time&31):02d}'
@@ -376,36 +375,6 @@ def myPopup(title='Popup Title', message='Popup message.', buttons_text=['Cancel
     for b in buttons:
         b.bind(on_press=btn_callback)
     popup.open()
-
-
-class ImageButton(ButtonBehavior, Image):
-    """ Kivy class to show an image thumbnail into the gallery """
-    # The parent container ThumbnailsScreen instance.
-    thumbs_screen = None
-    dcim_path = None
-    mark = None
-    markshadow = None
-
-    def on_press(self):
-        if self.dcim_path in self.thumbs_screen.images_selected:
-            self.unselect()
-        else:
-            self.select()
-
-    def select(self):
-        if self.dcim_path != None:
-            self.mark.text = self.thumbs_screen.FA_SQUARE_CHECK
-            self.markshadow.text = self.thumbs_screen.FA_SQUARE
-            self.thumbs_screen.images_selected[self.dcim_path] = True
-            self.thumbs_screen.ids.lbl_selection.text = LABEL_SELECTION % (len(self.thumbs_screen.images_selected), len(self.thumbs_screen.images_list))
-
-    def unselect(self):
-        if self.dcim_path != None:
-            self.mark.text = ''
-            self.markshadow.text = ''
-            if self.dcim_path in self.thumbs_screen.images_selected:
-                del self.thumbs_screen.images_selected[self.dcim_path]
-            self.thumbs_screen.ids.lbl_selection.text = LABEL_SELECTION % (len(self.thumbs_screen.images_selected), len(self.thumbs_screen.images_list))
 
 
 class MenuScreen(Screen):
@@ -498,6 +467,84 @@ class ThumbnailsScreen(Screen):
     images_selected = None
     thumbs_widgets_list = None
 
+
+    class ImageButton(ButtonBehavior, Image):
+        """ Kivy class to show an image thumbnail into the gallery """
+        # The parent container ThumbnailsScreen instance.
+        thumbs_screen = None
+        dcim_path = None
+        mark = None
+        markshadow = None
+
+        def on_press(self):
+            if self.dcim_path in self.thumbs_screen.images_selected:
+                self.unselect()
+            else:
+                self.select()
+
+        def select(self):
+            if self.dcim_path != None:
+                self.mark.text = self.thumbs_screen.FA_SQUARE_CHECK
+                self.markshadow.text = self.thumbs_screen.FA_SQUARE
+                self.thumbs_screen.images_selected[self.dcim_path] = True
+                self.thumbs_screen.ids.lbl_selection.text = LABEL_SELECTION % (len(self.thumbs_screen.images_selected), len(self.thumbs_screen.images_list))
+
+        def unselect(self):
+            if self.dcim_path != None:
+                self.mark.text = ''
+                self.markshadow.text = ''
+                if self.dcim_path in self.thumbs_screen.images_selected:
+                    del self.thumbs_screen.images_selected[self.dcim_path]
+                self.thumbs_screen.ids.lbl_selection.text = LABEL_SELECTION % (len(self.thumbs_screen.images_selected), len(self.thumbs_screen.images_list))
+
+
+    class progressPopup(Popup):
+        """ A Popup to show progress on file operations, e.g. download or delete """
+
+        def __init__(self, on_cancel=None, **kwargs):
+            super().__init__(**kwargs)
+            self.dismissed = False
+            self.on_cancel = on_cancel
+            self.message = Label(text=self.content.text, size_hint=(1, 0.25))
+            self.progress_bar_count = ProgressBar(max=100, value=0, size_hint=(1, 0.10))
+            self.progress_bar_file = ProgressBar(max=100, value=0, size_hint=(1, 0.10))
+            btn_box = BoxLayout(spacing=10, padding=8, size_hint=(1.0, 0.25))
+            btn_box.add_widget(Widget(size_hint=(0.75, 1.0)))
+            btn_cancel = Button(text='Cancel', size_hint=(0.25, 1.0))
+            btn_cancel.bind(on_press=self.on_cancel)
+            btn_box.add_widget(btn_cancel)
+            layout = BoxLayout(orientation='vertical', spacing=5)
+            layout.add_widget(self.message)
+            layout.add_widget(self.progress_bar_count)
+            layout.add_widget(self.progress_bar_file)
+            layout.add_widget(btn_box)
+            self.content = layout
+
+        def on_open(self):
+            # Warning: open() and dismiss() are called asyncronously,
+            # so avoid binding if already dismissed (and unbinded).
+            if not self.dismissed:
+                # Bind keypress
+                Window.bind(on_key_down=self._on_key_down)
+
+        def on_dismiss(self):
+            self.dismissed = True
+            # Unbind to avoid side-effects
+            Window.unbind(on_key_down=self._on_key_down)
+
+        def _on_key_down(self, window, key, scancode, codepoint, modifiers):
+            # ESC key = 27
+            if key == 27:
+                self.on_cancel(None)
+                return True
+            return False
+
+
+    def simple_popup(self, title, message, dt):
+        """ Display a simple popup from the main Kivy thread of this Screen """
+        myPopup(title=title, message=message, buttons_text=['Cancel'], callbacks=[None])
+
+
     def on_pre_enter(self):
         """ Initialize the images list and create directories """
         app = App.get_running_app()
@@ -542,7 +589,7 @@ class ThumbnailsScreen(Screen):
             resp = None
         if resp is None:
             Logger.error('Thumbnails: ' + msg)
-            Clock.schedule_once(partial(self.screen_popup, 'Error', msg))
+            Clock.schedule_once(partial(self.simple_popup, 'Error', msg))
             return
         # Get the DCIM directory listing.
         url = 'http://%s%s?DIR=%s' % (self.cfg.get('openolyimageshare', 'olympus_host'), GET_IMGLIST, directory)
@@ -557,7 +604,7 @@ class ThumbnailsScreen(Screen):
             resp = None
         if resp is None:
             Logger.error('Thumbnails: ' + msg)
-            Clock.schedule_once(partial(self.screen_popup, 'Error', msg))
+            Clock.schedule_once(partial(self.simple_popup, 'Error', msg))
             return
         #Logger.info('resp.text: %s' % (resp.text,))
         # Response example:
@@ -669,7 +716,7 @@ class ThumbnailsScreen(Screen):
                     if thumbnail_image_source is None or not os.path.exists(thumbnail_image_source):
                         thumbnail_image_source = BROKEN_IMAGE
                 thumb = FloatLayout()
-                img = ImageButton(source=thumbnail_image_source, pos_hint={'x': 0, 'y': 0}, size_hint=(1, 1), allow_stretch=True, keep_ratio=True)
+                img = self.ImageButton(source=thumbnail_image_source, pos_hint={'x': 0, 'y': 0}, size_hint=(1, 1), allow_stretch=True, keep_ratio=True)
                 img.thumbs_screen = self
                 img.dcim_path = dcim_path
                 img.markshadow = Label(font_name='fa-solid', font_size=int(mark_size*1.25), color=(0,0,0,0.6), bold=True, halign='left', valign='middle', pos_hint={'x': 0.35, 'y': 0.35})
@@ -770,7 +817,7 @@ class ThumbnailsScreen(Screen):
         if selected > 0:
             message = 'Ready to delete %d files...' % (selected,)
             # Open a non blocking Popup (it returns while it is still open).
-            self.download_popup = myPopup(title='File Delete', message=message, buttons_text=['Cancel', 'OK'], callbacks=[None, self.delete_selected_confirmed])
+            self.confirm_popup = myPopup(title='File Delete', message=message, buttons_text=['Cancel', 'OK'], callbacks=[None, self.delete_selected_confirmed])
 
 
     def download_selected(self):
@@ -779,60 +826,13 @@ class ThumbnailsScreen(Screen):
         if selected > 0:
             message = 'Ready to download %d files...' % (selected,)
             # Open a non blocking Popup (it returns while it is still open).
-            self.download_popup = myPopup(title='File Download', message=message, buttons_text=['Cancel', 'OK'], callbacks=[None, self.download_selected_confirmed])
+            self.confirm_popup = myPopup(title='File Download', message=message, buttons_text=['Cancel', 'OK'], callbacks=[None, self.download_selected_confirmed])
 
 
-    def screen_popup(self, title, message, dt):
-        """ Display a popup from the main Kivy thread of this Screen """
-        myPopup(title=title, message=message, buttons_text=['Cancel'], callbacks=[None])
-
-
-    class progressPopup(Popup):
-        """ A Popup to show progress on file operations, e.g. download or delete """
-
-        def __init__(self, on_cancel=None, **kwargs):
-            super().__init__(**kwargs)
-            self.dismissed = False
-            self.on_cancel = on_cancel
-            self.message = Label(text=self.content.text, size_hint=(1, 0.25))
-            self.progress_bar_count = ProgressBar(max=100, value=0, size_hint=(1, 0.10))
-            self.progress_bar_file = ProgressBar(max=100, value=0, size_hint=(1, 0.10))
-            btn_box = BoxLayout(spacing=10, padding=8, size_hint=(1.0, 0.25))
-            btn_box.add_widget(Widget(size_hint=(0.75, 1.0)))
-            btn_cancel = Button(text='Cancel', size_hint=(0.25, 1.0))
-            btn_cancel.bind(on_press=self.on_cancel)
-            btn_box.add_widget(btn_cancel)
-            layout = BoxLayout(orientation='vertical', spacing=5)
-            layout.add_widget(self.message)
-            layout.add_widget(self.progress_bar_count)
-            layout.add_widget(self.progress_bar_file)
-            layout.add_widget(btn_box)
-            self.content = layout
-
-        def on_open(self):
-            # Warning: open() and dismiss() are called asyncronously,
-            # so avoid binding if already dismissed (and unbinded).
-            if not self.dismissed:
-                # Bind keypress
-                Window.bind(on_key_down=self._on_key_down)
-
-        def on_dismiss(self):
-            self.dismissed = True
-            # Unbind to avoid side-effects
-            Window.unbind(on_key_down=self._on_key_down)
-
-        def _on_key_down(self, window, key, scancode, codepoint, modifiers):
-            # ESC key = 27
-            if key == 27:
-                self.on_cancel(None)
-                return True
-            return False
-
-
-    def cancel_download(self, event):
-        """ Interrupt files download """
-        Logger.info('Download: Cancel requested')
-        self.download_cancel_requested = True
+    def cancel_progress(self, event):
+        """ Interrupt files processing, e.g. download or delete """
+        Logger.info('Progress: Cancel requested')
+        self.progress_cancel_requested = True
 
 
     def download_selected_confirmed(self):
@@ -842,7 +842,7 @@ class ThumbnailsScreen(Screen):
         # Also the Popup.open() must be called here, otherwise the error:
         # "Cannot change graphics instruction outside the main Kivy thread".
         msg_text = LABEL_FILE_COUNT_PROGRESS % (1, len(self.images_selected))
-        self.progress_popup = self.progressPopup(on_cancel=self.cancel_download, title='Downloading...', content=Label(text=msg_text), auto_dismiss=False, size_hint=SIZE_HINT_DOWNLOAD_VERTICAL)
+        self.progress_popup = self.progressPopup(on_cancel=self.cancel_progress, title='Downloading...', content=Label(text=msg_text), auto_dismiss=False, size_hint=SIZE_HINT_DOWNLOAD_VERTICAL)
         self.progress_popup.open()
         try:
             os.makedirs(self.download_dir, exist_ok=True)
@@ -850,7 +850,7 @@ class ThumbnailsScreen(Screen):
             msg = 'Exception creating download directory "%s": %s' % (self.download_dir, ex)
             Logger.error('Download: ' + msg)
             self.progress_popup.dismiss()
-            Clock.schedule_once(partial(self.screen_popup, 'Error', msg))
+            Clock.schedule_once(partial(self.simple_popup, 'Error', msg))
             return
         Thread(target=self.download_loop).start()
 
@@ -858,7 +858,7 @@ class ThumbnailsScreen(Screen):
     def delete_selected_confirmed(self):
         """ Show a progress Popup and start the file download loop in another thread """
         msg_text = LABEL_FILE_COUNT_PROGRESS % (1, len(self.images_selected))
-        self.progress_popup = self.progressPopup(on_cancel=self.cancel_download, title='Deleting...', content=Label(text=msg_text), auto_dismiss=False, size_hint=SIZE_HINT_DOWNLOAD_VERTICAL)
+        self.progress_popup = self.progressPopup(on_cancel=self.cancel_progress, title='Deleting...', content=Label(text=msg_text), auto_dismiss=False, size_hint=SIZE_HINT_DOWNLOAD_VERTICAL)
         self.progress_popup.open()
         Thread(target=self.delete_loop).start()
 
@@ -867,7 +867,7 @@ class ThumbnailsScreen(Screen):
         """ File download loop executed into a background thread, showing progress bar """
         count = 1
         count_tot = len(self.images_selected)
-        self.download_cancel_requested = False
+        self.progress_cancel_requested = False
         for img in self.images_list:
             dcim_path = img[ITEM_KEY_FILENAME]
             if dcim_path in self.images_selected:
@@ -885,7 +885,7 @@ class ThumbnailsScreen(Screen):
                     del self.images_selected[dcim_path]
                 # Update the selection counter.
                 self.ids.lbl_selection.text = LABEL_SELECTION % (len(self.images_selected), len(self.images_list))
-            if self.download_cancel_requested:
+            if self.progress_cancel_requested:
                 break
         self.progress_popup.dismiss()
         # The self.refresh_thumbnails_page() must not add or delete graphics
@@ -895,13 +895,14 @@ class ThumbnailsScreen(Screen):
 
     def delete_loop(self):
         """ Photos delete loop executed into a background thread, showing a progress bar """
+        camera_host = self.cfg.get('openolyimageshare', 'olympus_host')
         delete_count = 0
         deleted_list = []
         count_tot = len(self.images_selected)
         last_image_in_page = ((self.current_page + 1) * self.grid.rows * self.grid.cols) - 1
         current_page_new = self.current_page
         image_index = 0
-        self.download_cancel_requested = False
+        self.progress_cancel_requested = False
         for img in self.images_list:
             dcim_path = img[ITEM_KEY_FILENAME]
             if dcim_path in self.images_selected:
@@ -909,7 +910,7 @@ class ThumbnailsScreen(Screen):
                 count_percent = int(delete_count * 100 / count_tot)
                 self.progress_popup.message.text = LABEL_FILE_COUNT_PROGRESS % (delete_count+1, count_tot)
                 self.progress_popup.progress_bar_count.value = count_percent
-                url = 'http://%s%s%s' % (self.cfg.get('openolyimageshare', 'olympus_host'), GET_EXEC_ERASE, dcim_path)
+                url = 'http://%s%s%s' % (camera_host, GET_EXEC_ERASE, dcim_path)
                 Logger.info('Delete: Requesting URL: "%s"' % (url,))
                 erase_failed = False
                 try:
@@ -917,18 +918,18 @@ class ThumbnailsScreen(Screen):
                 except Exception as ex:
                     msg = 'Exception erasing image: %s' % (ex,)
                     Logger.error('Delete: ' + msg)
-                    Clock.schedule_once(partial(self.screen_popup, 'Error', msg))
+                    Clock.schedule_once(partial(self.simple_popup, 'Error', msg))
                     erase_failed = True
                 if resp.status_code != 200:
                     msg = 'Error in GET exec erase; response status code: %s' % (resp.status_code,)
                     Logger.error('Delete: ' + msg)
-                    Clock.schedule_once(partial(self.screen_popup, 'Error', msg))
+                    Clock.schedule_once(partial(self.simple_popup, 'Error', msg))
                     erase_failed = True
                 # Simulate a slow Wi-Fi connection.
-                if SIMULATE_SLOW_WIFI:
+                if camera_host == '127.0.0.1' and SIMULATE_SLOW_WIFI_ON_LOCALHOST:
                     time.sleep(0.5)
                 if erase_failed:
-                    self.download_cancel_requested = True
+                    self.progress_cancel_requested = True
                 else:
                     delete_count += 1
                     deleted_list.append(img)
@@ -940,7 +941,7 @@ class ThumbnailsScreen(Screen):
                 image_index_new = max(0, image_index - delete_count)
                 current_page_new = int(image_index_new / (self.grid.rows * self.grid.cols))
                 Logger.info('NewIndex: Current page: %02d, Last in page: %03d, Index: %03d, New index: %03d, Deleted: %03d, New current page: %02d' % (self.current_page, last_image_in_page, image_index, image_index_new, len(deleted_list), current_page_new))
-            if self.download_cancel_requested:
+            if self.progress_cancel_requested:
                 break
             image_index += 1
         # Remove erased photos from the self.images_list (do it outside the iteration).
@@ -983,6 +984,7 @@ class ThumbnailsScreen(Screen):
     def download_file(self, url, dst_filename, timestamp=None, filesize=None, timeout=5.0):
         """ Download an HTTP file in chunks updating a progress bar """
         Logger.info('Download: Downloading file: "%s" => "%s"' % (url, dst_filename))
+        camera_host = self.cfg.get('openolyimageshare', 'olympus_host')
         photo_basename = os.path.basename(dst_filename)
         if os.path.exists(dst_filename):
             Logger.warning('Download: File already downloaded: "%s"' % (dst_filename,))
@@ -1000,15 +1002,15 @@ class ThumbnailsScreen(Screen):
                                 percent = int(downloaded / total * 100)
                                 Clock.schedule_once(lambda dt, p=percent: self.update_progress(p))
                                 # Simulate a slow Wi-Fi connection.
-                                if SIMULATE_SLOW_WIFI:
-                                    time.sleep(0.02)
-                            if self.download_cancel_requested:
+                                if camera_host == '127.0.0.1' and SIMULATE_SLOW_WIFI_ON_LOCALHOST:
+                                    time.sleep(0.1)
+                            if self.progress_cancel_requested:
                                 break
             except Exception as ex:
                 Logger.error('Download: Exception requesting file "%s": %s' % (url, ex))
-                Clock.schedule_once(partial(self.screen_popup, 'Download Error', 'Exception requesting file: %s' % (ex,)))
-                self.download_cancel_requested = True
-            if self.download_cancel_requested:
+                Clock.schedule_once(partial(self.simple_popup, 'Download Error', 'Exception requesting file: %s' % (ex,)))
+                self.progress_cancel_requested = True
+            if self.progress_cancel_requested:
                 try:
                     os.unlink(dst_filename)
                 except Exception as ex:
@@ -1026,7 +1028,7 @@ class ThumbnailsScreen(Screen):
             if downloaded_file_size != filesize:
                 Logger.error('Download: Downloaded file %s size FAIL: %d (expcted %d)' % (dst_filename, downloaded_file_size, filesize))
                 # Show the error popup in the main Kivy thread.
-                Clock.schedule_once(partial(self.screen_popup, 'Download Error', 'File %s: downloaded size does not match size in camera listing.' % (photo_basename,)))
+                Clock.schedule_once(partial(self.simple_popup, 'Download Error', 'File %s: downloaded size does not match size in camera listing.' % (photo_basename,)))
             else:
                 Logger.info('Download: Downloaded file %s size OK: %d' % (dst_filename, downloaded_file_size))
         return dst_filename
