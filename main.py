@@ -51,7 +51,7 @@ __author__ = "Niccolo Rigacci"
 __copyright__ = "Copyright 2023-2025 Niccolo Rigacci <niccolo@rigacci.org>"
 __license__ = "GPLv3-or-later"
 __email__ = "niccolo@rigacci.org"
-__version__ = "0.45"
+__version__ = "0.46"
 
 
 class RingBufferHandler(logging.Handler):
@@ -72,7 +72,7 @@ class RingBufferHandler(logging.Handler):
 Logger.setLevel(LOG_LEVELS['info'])
 
 # Add a log handler into the ring buffer.
-log_memory_handler = RingBufferHandler(max_records=110)
+log_memory_handler = RingBufferHandler(max_records=64)
 log_memory_handler.setFormatter(logging.Formatter("[%(levelname)s] %(message)s"))
 Logger.addHandler(log_memory_handler)
 
@@ -96,14 +96,14 @@ DOWNLOAD_DST = 'DCIM/OLYMPUS'
 # NOTICE: Use integer value not boolean, despite settings.json has "type": "bool".
 DOWNLOAD_DST_IS_RELATIVE = 1
 
-# Olympus WiFi access point mode defaul IP address.
+# Olympus Wi-Fi access point mode defaul IP address.
 OLYMPUS_HOST = '192.168.0.10'
 # Add a delay downloading from OLYMPUS_HOST, for testing.
 SIMULATE_SLOW_WIFI_ON_LOCALHOST = True
 
 # Message displayed if connection check fails.
-CONNECT_HINT = '\n\n------\n\n   On the Olympus camera select "Connection to Smartphone" from the Playback Menu, then connect this device to the WiFi network displayed on the camera screen.\nNOTICE: On Android you may need to disable Mobile data to allow communication with the camera IP address.'
-CONNECT_HINT = '\n\n------\n\nHow To Connect the Camera:\nSelect "Connection to Smartphone" from the Playback Menu of the Olympus camera, then connect this device to the WiFi network displayed on the camera screen.\nNOTICE: On Android you may need to disable Mobile data to allow communication with the camera IP address.'
+CONNECT_HINT = '\n\n------\n\n   On the Olympus camera select "Connection to Smartphone" from the Playback Menu, then connect this device to the Wi-Fi network displayed on the camera screen.\nNOTICE: On Android you may need to disable Mobile data to allow communication with the camera IP address.'
+CONNECT_HINT = '\n\n------\n\nHow To Connect the Camera:\nSelect "Connection to Smartphone" from the Playback Menu of the Olympus camera, then connect this device to the Wi-Fi network displayed on the camera screen.\nNOTICE: On Android you may need to disable Mobile data to allow communication with the camera IP address.'
 
 # Message displayed into the about screen.
 ABOUT_MSG = 'Open Oly ImageShare v.%s\n\n%s\nLicense: %s\n\nExternal storage: %%s\nDownload folder: %%s\n\n%s' % (__version__, __copyright__, __license__, 'https://github.com/RigacciOrg/open-oly-imageshare')
@@ -354,6 +354,14 @@ Builder.load_string("""
 
 """)
 
+def trim_ex(ex):
+    """ Trim an Exception message to a fixed length, eventually adding ellipsis """
+    message = str(ex)
+    if len(message) > 150:
+        return message[:150] + '...'
+    else:
+        return message
+
 
 def olympus_timestamp(date, time):
     """ Convert the Olympus integers tuple (date, time) into a timestamp """
@@ -425,7 +433,7 @@ class ConnectionScreen(Screen):
         try:
             resp = requests.get(url, timeout=TIMEOUT_GET_COMMAND)
         except Exception as ex:
-            msg = 'Exception getting camera info: %s' % (ex,)
+            msg = 'Exception getting camera info: %s' % (trim_ex(ex),)
             Logger.error('Connection: ' + msg)
             self.ids.connection_label.text = msg + CONNECT_HINT
             return
@@ -453,7 +461,7 @@ class AboutScreen(Screen):
         app_download_dir = app.app_download_dir()
         about = ABOUT_MSG % (app.primary_ext_storage, app_download_dir)
         about += '\n\n' + '='*40
-        latest_messages = '\n'.join(log_memory_handler.get_last(100))
+        latest_messages = '\n'.join(log_memory_handler.get_last(60))
         num_lines = len(about.splitlines()) + 1
         self.ids.about_label.text = about
         self.ids.about_label.height = self.ids.about_label.font_size * 1.2 * num_lines
@@ -598,11 +606,11 @@ class ThumbnailsScreen(Screen):
         try:
             os.makedirs(self.cache_subdir, exist_ok=True)
         except Exception as ex:
-            Logger.error('Thumbnails: Exception creating cache directory "%s": %s' % (self.cache_subdir, ex))
+            Logger.error('Thumbnails: Exception creating cache directory "%s": %s' % (self.cache_subdir, trim_ex(ex)))
         try:
             os.makedirs(self.download_dir, exist_ok=True)
         except Exception as ex:
-            Logger.error('Thumbnails: Exception creating download directory "%s": %s' % (self.download_dir, ex))
+            Logger.error('Thumbnails: Exception creating download directory "%s": %s' % (self.download_dir, trim_ex(ex)))
 
 
     def on_enter(self):
@@ -614,14 +622,14 @@ class ThumbnailsScreen(Screen):
 
 
     def get_dcim_imglist(self, directory):
-        """ Read a DCIM directory listing via WiFi camera access point and fill the self.images_list """
+        """ Read a DCIM directory listing via Wi-Fi camera access point and fill the self.images_list """
         # Switch the camera to play mode.
         url = 'http://%s%s' % (self.cfg.get('openolyimageshare', 'olympus_host'), GET_MODE_PLAY)
         Logger.info('Thumbnails: Setting camera mode: %s' % (url,))
         try:
             resp = requests.get(url, timeout=TIMEOUT_GET_COMMAND)
         except Exception as ex:
-            msg = 'Exception switching camera mode to play: %s' % (ex,)
+            msg = 'Exception switching camera mode to play: %s' % (trim_ex(ex),)
             resp = None
         if resp is not None and resp.status_code != 200:
             msg = 'Error in response status code: %s' % (resp.status_code,)
@@ -636,7 +644,7 @@ class ThumbnailsScreen(Screen):
         try:
             resp = requests.get(url, timeout=TIMEOUT_GET_IMGLIST)
         except Exception as ex:
-            msg = 'Exception getting image list: %s' % (ex,)
+            msg = 'Exception getting image list: %s' % (trim_ex(ex),)
             resp = None
         if resp is not None and resp.status_code != 200:
             msg = 'Error in GET imagelist; response status code: %s' % (resp.status_code,)
@@ -666,7 +674,7 @@ class ThumbnailsScreen(Screen):
                 item_date = int(parts[4])
                 item_time = int(parts[5])
             except Exception as ex:
-                Logger.warning('Thumbnails: Exception parsing line "%s": %s' % (line, ex))
+                Logger.warning('Thumbnails: Exception parsing line "%s": %s' % (line, trim_ex(ex)))
                 continue
             dcim_path = '/'.join((path, item))
             if item_attrib & OLYMPUS_ATTRIB_HIDDEN:
@@ -704,14 +712,14 @@ class ThumbnailsScreen(Screen):
                     try:
                         age = time.time() - os.path.getmtime(filename)
                     except Exception as ex:
-                        Logger.error('CachePurge: Exception getting mtime from "%s": %s' % (filename, ex))
+                        Logger.error('CachePurge: Exception getting mtime from "%s": %s' % (filename, trim_ex(ex)))
                         continue
                     if age > (self.cfg.getint('openolyimageshare', 'max_cache_age_days') * 24 * 3600):
                         Logger.info('CachePurge: Purging file "%s"' % (filename,))
                         try:
                             os.unlink(filename)
                         except Exception as ex:
-                            Logger.error('CachePurge: Exception removing file "%s": %s' % (filename, ex))
+                            Logger.error('CachePurge: Exception removing file "%s": %s' % (filename, trim_ex(ex)))
 
 
     def logs_purge_older(self):
@@ -821,12 +829,12 @@ class ThumbnailsScreen(Screen):
         try:
             os.makedirs(cache_subdir, exist_ok=True)
         except Exception as ex:
-            Logger.error('ThumbnailsScreen: Exception creating directory "%s": %s' % (cache_subdir, ex))
+            Logger.error('ThumbnailsScreen: Exception creating directory "%s": %s' % (cache_subdir, trim_ex(ex)))
             return None
         url = 'http://%s%s%s' % (camera_host, GET_THUMBNAIL, item[ITEM_KEY_FILENAME])
         Logger.info('Thumbnails: Getting URL: "%s"' % (url,))
         timestamp_now = time.strftime('%Y-%m-%dT%H:%M:%S')
-        cached_file = self.wget_file(url, cache_filename, timestamp=timestamp_now, timeout=TIMEOUT_GET_THUMBNAIL)
+        cached_file = self.get_file(url, cache_filename, timestamp=timestamp_now, timeout=TIMEOUT_GET_THUMBNAIL)
         return cached_file
 
 
@@ -909,7 +917,7 @@ class ThumbnailsScreen(Screen):
         try:
             os.makedirs(self.download_dir, exist_ok=True)
         except Exception as ex:
-            msg = 'Exception creating download directory "%s": %s' % (self.download_dir, ex)
+            msg = 'Exception creating download directory "%s": %s' % (self.download_dir, trim_ex(ex))
             Logger.error('Download: ' + msg)
             self.progress_popup.dismiss()
             Clock.schedule_once(partial(self.simple_popup, 'Error', msg))
@@ -978,7 +986,7 @@ class ThumbnailsScreen(Screen):
                 try:
                     resp = requests.get(url, timeout=TIMEOUT_GET_COMMAND)
                 except Exception as ex:
-                    msg = 'Exception erasing image: %s' % (ex,)
+                    msg = 'Exception erasing image: %s' % (trim_ex(ex),)
                     Logger.error('Delete: ' + msg)
                     Clock.schedule_once(partial(self.simple_popup, 'Error', msg))
                     erase_failed = True
@@ -1016,25 +1024,25 @@ class ThumbnailsScreen(Screen):
         Clock.schedule_once(lambda dt: self.fill_thumbnails_page())
 
 
-    def wget_file(self, url, dst_filename, timestamp=None, timeout=2.0):
+    def get_file(self, url, dst_filename, timestamp=None, timeout=2.0):
         """ If not alread downloaded, get a file from the url and save to dst_filename """
-        Logger.debug('wget_file: Getting file: "%s" => "%s"' % (url, dst_filename))
+        Logger.debug('get_file: Getting file: "%s" => "%s"' % (url, dst_filename))
         if not os.path.exists(dst_filename):
             try:
                 resp = requests.get(url, timeout=timeout)
             except Exception as ex:
-                Logger.error('wget_file: Exception getting file "%s": %s' % (url, ex))
+                Logger.error('get_file: Exception getting file "%s": %s' % (url, trim_ex(ex)))
                 resp = None
                 dst_filename = None
             if resp is not None and resp.status_code != 200:
-                Logger.error('wget_file: Response error getting file "%s": %s' % (url, resp.status_code))
+                Logger.error('get_file: Response error getting file "%s": %s' % (url, resp.status_code))
                 dst_filename = None
             if dst_filename is not None:
                 try:
                     open(dst_filename, 'wb').write(resp.content)
-                    Logger.info('wget_file: Saved "%s"' % (dst_filename,))
+                    Logger.info('get_file: Saved "%s"' % (dst_filename,))
                 except Exception as ex:
-                    Logger.error('wget_file: Exception saving file "%s": %s' % (dst_filename, ex))
+                    Logger.error('get_file: Exception saving file "%s": %s' % (dst_filename, trim_ex(ex)))
                     dst_filename = None
             # Set the modified time to the file.
             if dst_filename is not None and timestamp is not None:
@@ -1073,14 +1081,14 @@ class ThumbnailsScreen(Screen):
                             if self.progress_cancel_requested:
                                 break
             except Exception as ex:
-                Logger.error('Download: Exception requesting file "%s": %s' % (url, ex))
-                Clock.schedule_once(partial(self.simple_popup, 'Download Error', 'Exception requesting file: %s' % (ex,)))
+                Logger.error('Download: Exception requesting file "%s": %s' % (url, trim_ex(ex)))
+                Clock.schedule_once(partial(self.simple_popup, 'Download Error', 'Exception requesting file: %s' % (trim_ex(ex),)))
                 self.progress_cancel_requested = True
             if self.progress_cancel_requested:
                 try:
                     os.unlink(dst_filename)
                 except Exception as ex:
-                    Logger.error('Download: Exception deleting partial file "%s": %s' % (dst_filename, ex))
+                    Logger.error('Download: Exception deleting partial file "%s": %s' % (dst_filename, trim_ex(ex)))
                 dst_filename = None
             # Set the modified time to the file.
             if dst_filename is not None and timestamp is not None:
@@ -1088,7 +1096,7 @@ class ThumbnailsScreen(Screen):
                     mtime_epoch = int(time.mktime(time.strptime(timestamp, '%Y-%m-%dT%H:%M:%S')))
                     os.utime(dst_filename, (mtime_epoch, mtime_epoch))
                 except Exception as ex:
-                    Logger.error('Download: Exception changing time of file "%s": %s' % (dst_filename, ex))
+                    Logger.error('Download: Exception changing time of file "%s": %s' % (dst_filename, trim_ex(ex)))
         if dst_filename is not None and filesize is not None:
             downloaded_file_size = os.path.getsize(dst_filename)
             if downloaded_file_size != filesize:
