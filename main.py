@@ -321,7 +321,7 @@ Builder.load_string("""
             Image:
                 source: 'res/img/hourglass.png'
                 size_hint: 1, 1
-                allow_stretch: True
+                fit_mode: 'contain'
                 pos: hourglass.pos
                 size: hourglass.size
 
@@ -766,7 +766,7 @@ class ThumbnailsScreen(Screen):
                     img_data = self.images_list[current_image]
                 thumb = FloatLayout()
                 # Prepare the empty thumbnail placeholder, it will be filled later.
-                img = self.ImageButton(source=BLANK_IMAGE, pos_hint={'x': 0, 'y': 0}, size_hint=(1, 1), allow_stretch=True, keep_ratio=True)
+                img = self.ImageButton(source=BLANK_IMAGE, pos_hint={'x': 0, 'y': 0}, size_hint=(1, 1), fit_mode='contain')
                 img.thumbs_screen = self
                 img.dcim_path = dcim_path
                 img.img_data = img_data
