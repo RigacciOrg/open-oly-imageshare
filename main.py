@@ -15,6 +15,7 @@ environment you should install the xclip and xsel tools
 
 import hashlib
 import logging
+import math
 import os
 import requests
 import time
@@ -51,7 +52,7 @@ __author__ = "Niccolo Rigacci"
 __copyright__ = "Copyright 2023-2025 Niccolo Rigacci <niccolo@rigacci.org>"
 __license__ = "GPLv3-or-later"
 __email__ = "niccolo@rigacci.org"
-__version__ = "0.46"
+__version__ = "0.47"
 
 
 class RingBufferHandler(logging.Handler):
@@ -150,7 +151,7 @@ IMAGES_SORT_KEY = ITEM_KEY_TIMESTAMP
 SHOW_FILES = ['JPG', 'MOV']
 
 # GUI labels.
-LABEL_SELECTION = 'Sel. %d/%d'
+LABEL_SELECTION = '%d/%d  |  %d/%d'
 LABEL_FILE_COUNT_PROGRESS = 'File %d/%d'
 
 # Placeholder images.
@@ -273,36 +274,36 @@ Builder.load_string("""
             BoxLayout:
                 id: bottom_buttons
                 font_size: 32
-                size_hint: 1.0, 0.05
+                size_hint: 1.0, 0.06
                 Button:
                     id: btn_backward
-                    size_hint: 0.15, 1.0
+                    size_hint: 0.13, 1.0
                     on_press: root.backward()
                     font_name: 'fa-solid'
                     font_size: self.parent.font_size
                     text: root.FA_ANGLE_LEFT
                 Button:
                     id: btn_fbackward
-                    size_hint: 0.15, 1.0
+                    size_hint: 0.13, 1.0
                     on_press: root.backward(5)
                     font_name: 'fa-solid'
                     font_size: self.parent.font_size
                     text: root.FA_ANGLES_LEFT
                 Label:
-                    size_hint: 0.40, 1.0
+                    size_hint: 0.48, 1.0
                     id: lbl_selection
                     font_size: self.parent.font_size
                     text: ''
                 Button:
                     id: btn_fforward
-                    size_hint: 0.15, 1.0
+                    size_hint: 0.13, 1.0
                     on_press: root.forward(5)
                     font_name: 'fa-solid'
                     font_size: self.parent.font_size
                     text: root.FA_ANGLES_RIGHT
                 Button:
                     id: btn_forward
-                    size_hint: 0.15, 1.0
+                    size_hint: 0.13, 1.0
                     on_press: root.forward()
                     font_name: 'fa-solid'
                     font_size: self.parent.font_size
@@ -524,7 +525,7 @@ class ThumbnailsScreen(Screen):
                 self.mark.text = self.thumbs_screen.FA_SQUARE_CHECK
                 self.markshadow.text = self.thumbs_screen.FA_SQUARE
                 self.thumbs_screen.images_selected[self.dcim_path] = True
-                self.thumbs_screen.ids.lbl_selection.text = LABEL_SELECTION % (len(self.thumbs_screen.images_selected), len(self.thumbs_screen.images_list))
+                self.thumbs_screen.update_status_label()
 
         def unselect(self):
             if self.dcim_path != None:
@@ -532,7 +533,7 @@ class ThumbnailsScreen(Screen):
                 self.markshadow.text = ''
                 if self.dcim_path in self.thumbs_screen.images_selected:
                     del self.thumbs_screen.images_selected[self.dcim_path]
-                self.thumbs_screen.ids.lbl_selection.text = LABEL_SELECTION % (len(self.thumbs_screen.images_selected), len(self.thumbs_screen.images_list))
+                self.thumbs_screen.update_status_label()
 
 
     class progressPopup(Popup):
@@ -577,21 +578,6 @@ class ThumbnailsScreen(Screen):
             return False
 
 
-    def simple_popup(self, title, message, dt):
-        """ Display a simple popup from the main Kivy thread of this Screen """
-        myPopup(title=title, message=message, buttons_text=['Cancel'], callbacks=[None])
-
-
-    def hourglass_set(self, visible=True):
-        print('toggle_hourglass()')
-        if visible:
-            self.ids.hourglass.disabled = True
-            self.ids.hourglass.opacity = 1.0
-        else:
-            self.ids.hourglass.disabled = False
-            self.ids.hourglass.opacity = 0.0
-
-
     def on_pre_enter(self):
         """ Initialize the images list and create directories """
         app = App.get_running_app()
@@ -619,6 +605,30 @@ class ThumbnailsScreen(Screen):
         self.fill_thumbnails_page()
         self.cache_purge_older()
         self.logs_purge_older()
+
+
+    def simple_popup(self, title, message, dt):
+        """ Display a simple popup from the main Kivy thread of this Screen """
+        myPopup(title=title, message=message, buttons_text=['Cancel'], callbacks=[None])
+
+
+    def hourglass_set(self, visible=True):
+        print('toggle_hourglass()')
+        if visible:
+            self.ids.hourglass.disabled = True
+            self.ids.hourglass.opacity = 1.0
+        else:
+            self.ids.hourglass.disabled = False
+            self.ids.hourglass.opacity = 0.0
+
+
+    def update_status_label(self):
+        """ Update page and selection counters """
+        selected_images_count = len(self.images_selected)
+        total_images_count = len(self.images_list)
+        current_page_num = self.current_page + 1
+        total_pages_count = math.ceil(float(total_images_count) / (self.grid.rows * self.grid.cols))
+        self.ids.lbl_selection.text = LABEL_SELECTION % (current_page_num, total_pages_count, selected_images_count, total_images_count)
 
 
     def get_dcim_imglist(self, directory):
@@ -781,8 +791,7 @@ class ThumbnailsScreen(Screen):
                 self.grid.add_widget(thumb)
                 self.thumbs_widgets_list.append(img)
                 current_image += 1
-        self.ids.lbl_selection.text = LABEL_SELECTION % (len(self.images_selected), len(self.images_list))
-        # TODO: Display a page counter.
+        self.update_status_label()
         Thread(target=self.set_thumbnails_source_all).start()
 
 
@@ -814,7 +823,7 @@ class ThumbnailsScreen(Screen):
             else:
                 img.unselect()
             current_image += 1
-        self.ids.lbl_selection.text = LABEL_SELECTION % (len(self.images_selected), len(self.images_list))
+        self.update_status_label()
 
 
     def cache_thumbnail(self, item):
@@ -954,7 +963,7 @@ class ThumbnailsScreen(Screen):
                     count += 1
                     del self.images_selected[dcim_path]
                 # Update the selection counter.
-                self.ids.lbl_selection.text = LABEL_SELECTION % (len(self.images_selected), len(self.images_list))
+                self.update_status_label()
             if self.progress_cancel_requested:
                 break
         self.progress_popup.dismiss()
@@ -1005,7 +1014,7 @@ class ThumbnailsScreen(Screen):
                     deleted_list.append(img)
                     del self.images_selected[dcim_path]
                 # Update the selection counter.
-                self.ids.lbl_selection.text = LABEL_SELECTION % (len(self.images_selected), len(self.images_list) - delete_count)
+                self.update_status_label()
             if image_index <= last_image_in_page:
                 # Calculate a new current page upon deleted photos.
                 image_index_new = max(0, image_index - delete_count)
