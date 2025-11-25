@@ -40,13 +40,6 @@
         "key": "max_cache_age_days"
     },
     {
-        "type": "string",
-        "title": "Cache directory",
-        "desc": "Where to store cached thumbnails, relative to the app folder",
-        "section": "openolyimageshare",
-        "key": "cache_root"
-    },
-    {
         "type": "title",
         "title": "Camera Gallery Style"
     },

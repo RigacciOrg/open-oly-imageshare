@@ -52,7 +52,7 @@ __author__ = "Niccolo Rigacci"
 __copyright__ = "Copyright 2023-2025 Niccolo Rigacci <niccolo@rigacci.org>"
 __license__ = "GPLv3-or-later"
 __email__ = "niccolo@rigacci.org"
-__version__ = "0.47"
+__version__ = "1.0"
 
 
 class RingBufferHandler(logging.Handler):
@@ -151,7 +151,7 @@ IMAGES_SORT_KEY = ITEM_KEY_TIMESTAMP
 SHOW_FILES = ['JPG', 'MOV']
 
 # GUI labels.
-LABEL_SELECTION = '%d/%d  |  %d/%d'
+LABEL_SELECTION = 'p %d/%d  |  %d/%d s'
 LABEL_FILE_COUNT_PROGRESS = 'File %d/%d'
 
 # Placeholder images.
