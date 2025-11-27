@@ -33,7 +33,7 @@ from kivy.core.text import LabelBase
 from kivy.core.window import Window
 from kivy.lang import Builder
 from kivy.logger import Logger, LOG_LEVELS
-from kivy.metrics import dp
+from kivy.metrics import dp, sp
 from kivy.uix.behaviors import ButtonBehavior
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
@@ -52,7 +52,7 @@ __author__ = "Niccolo Rigacci"
 __copyright__ = "Copyright 2023-2025 Niccolo Rigacci <niccolo@rigacci.org>"
 __license__ = "GPLv3-or-later"
 __email__ = "niccolo@rigacci.org"
-__version__ = "1.0"
+__version__ = "1.1b"
 
 
 class RingBufferHandler(logging.Handler):
@@ -112,12 +112,6 @@ ABOUT_MSG = 'Open Oly ImageShare v.%s\n\n%s\nLicense: %s\n\nExternal storage: %%
 # Default home directory for images.
 OLYMPUS_HOST_HOME = '/DCIM'
 
-# Interface settings.
-ICON_SIZE_TOP = 42
-ICON_SIZE_BOTTOM = 32
-GALLERY_ROWS = 6
-GALLERY_COLUMNS = 4
-
 # Olympus DCIM directory attribute bits.
 OLYMPUS_ATTRIB_NONE      =  0
 OLYMPUS_ATTRIB_HIDDEN    =  2
@@ -170,9 +164,10 @@ LabelBase.register(name='fa-solid', fn_regular='res/fonts/fa-solid-900.ttf')
 Builder.load_string("""
 <MenuScreen>:
     BoxLayout:
+        id: menu_content
         orientation: 'vertical'
-        spacing: 12
-        padding: 6
+        spacing: dp(app.MENU_PADDING)
+        padding: dp(app.MENU_PADDING), dp(app.MENU_PADDING), dp(app.MENU_PADDING), dp(app.MENU_PADDING)
         Button:
             text: 'Camera Gallery'
             size_hint_y: None
@@ -210,6 +205,7 @@ Builder.load_string("""
 
 <SettingsScreen>:
     BoxLayout:
+        padding: 0, dp(2), 0, dp(2)
         id: settings_content
         orientation: 'vertical'
         BoxLayout:
@@ -220,7 +216,7 @@ Builder.load_string("""
         id: connection_content
         orientation: 'vertical'
         BoxLayout:
-            padding: 8
+            padding: dp(8)
             Label:
                 id: connection_label
                 text: ''
@@ -231,11 +227,15 @@ Builder.load_string("""
 <ThumbnailsScreen>:
     FloatLayout:
         GridLayout:
+            id: thumbnails_content
             rows: 3
             cols: 1
+            padding: 0, dp(2), 0, dp(2)
             BoxLayout:
+                padding: dp(4)
+                spacing: dp(2)
                 id: top_buttons
-                font_size: 42
+                font_size: sp(42)
                 size_hint: 1.0, 0.10
                 Button:
                     font_name: 'fa-solid'
@@ -265,16 +265,18 @@ Builder.load_string("""
                     text: root.FA_DOWNLOAD
                     on_press: root.download_selected()
             GridLayout:
-                size_hint: 1.0, 0.85
+                size_hint: 1.0, 0.82
                 id: thumbnails_grid
                 rows: 6
                 cols: 4
-                spacing: 6
-                padding: 6
+                spacing: dp(6)
+                padding: dp(6)
             BoxLayout:
+                padding: dp(4)
+                spacing: dp(2)
                 id: bottom_buttons
-                font_size: 32
-                size_hint: 1.0, 0.06
+                font_size: sp(32)
+                size_hint: 1.0, 0.08
                 Button:
                     id: btn_backward
                     size_hint: 0.13, 1.0
@@ -378,10 +380,10 @@ def myPopup(title='Popup Title', message='Popup message.', buttons_text=['Cancel
     else:
         button_width = 1.0 / len(buttons_text)
         spacer_width = 0
-    box = BoxLayout(orientation='vertical', spacing=10)
+    box = BoxLayout(orientation='vertical', spacing=dp(10))
     label_text_width = int(Window.width * SIZE_HINT_MY_POPUP_VERTICAL[0] * 0.80)
     box.add_widget(Label(text=message, halign='left', valign='top', text_size=(label_text_width, None), size_hint=(1.0, 0.75)))
-    btn_box = BoxLayout(spacing=10, padding=8, size_hint=(1.0, 0.25))
+    btn_box = BoxLayout(spacing=dp(10), padding=dp(8), size_hint=(1.0, 0.25))
     if spacer_width > 0:
         btn_box.add_widget(Widget(size_hint=(spacer_width, 1.0)))
     # Create the buttons list.
@@ -417,7 +419,14 @@ class HourglassOverlay(Widget):
 
 class MenuScreen(Screen):
     """ Main menu screen """
-    pass
+
+
+    def on_pre_enter(self):
+        """ Set the screen padding """
+        app = App.get_running_app()
+        self.ids.menu_content.padding[1] = dp(app.MENU_PADDING + app.config.getint('openolyimageshare', 'padding_top'))
+        self.ids.menu_content.padding[3] = dp(app.MENU_PADDING + app.config.getint('openolyimageshare', 'padding_bottom'))
+        self.ids.menu_content.do_layout()
 
 
 class ConnectionScreen(Screen):
@@ -427,9 +436,9 @@ class ConnectionScreen(Screen):
         self.ids.connection_label.text = 'Testing connection...'
 
     def on_enter(self):
-        """  """
-        self.cfg = App.get_running_app().config
-        url = 'http://%s%s' % (self.cfg.get('openolyimageshare', 'olympus_host'), GET_CAMINFO)
+        """ Try to communicate with the camra URL """
+        app = App.get_running_app()
+        url = 'http://%s%s' % (app.config.get('openolyimageshare', 'olympus_host'), GET_CAMINFO)
         Logger.info('Connection: Getting URL: "%s"' % (url,))
         try:
             resp = requests.get(url, timeout=TIMEOUT_GET_COMMAND)
@@ -449,8 +458,12 @@ class ConnectionScreen(Screen):
 class SettingsScreen(Screen):
     """ Settings screen """
 
-    def on_enter(self):
-        pass
+    def on_pre_enter(self):
+        app = App.get_running_app()
+        self.cfg = app.config
+        self.ids.settings_content.padding[1] = dp(self.cfg.getint('openolyimageshare', 'padding_top'))
+        self.ids.settings_content.padding[3] = dp(self.cfg.getint('openolyimageshare', 'padding_bottom'))
+        self.ids.settings_content.do_layout()
 
 
 class AboutScreen(Screen):
@@ -546,12 +559,12 @@ class ThumbnailsScreen(Screen):
             self.message = Label(text=self.content.text, size_hint=(1, 0.25))
             self.progress_bar_count = ProgressBar(max=100, value=0, size_hint=(1, 0.10))
             self.progress_bar_file = ProgressBar(max=100, value=0, size_hint=(1, 0.10))
-            btn_box = BoxLayout(spacing=10, padding=8, size_hint=(1.0, 0.25))
+            btn_box = BoxLayout(spacing=dp(10), padding=dp(8), size_hint=(1.0, 0.25))
             btn_box.add_widget(Widget(size_hint=(0.75, 1.0)))
             btn_cancel = Button(text='Cancel', size_hint=(0.25, 1.0))
             btn_cancel.bind(on_press=self.on_cancel)
             btn_box.add_widget(btn_cancel)
-            layout = BoxLayout(orientation='vertical', spacing=5)
+            layout = BoxLayout(orientation='vertical', spacing=dp(5))
             layout.add_widget(self.message)
             layout.add_widget(self.progress_bar_count)
             layout.add_widget(self.progress_bar_file)
@@ -582,8 +595,11 @@ class ThumbnailsScreen(Screen):
         """ Initialize the images list and create directories """
         app = App.get_running_app()
         self.cfg = app.config
-        self.ids.top_buttons.font_size = self.cfg.getint('openolyimageshare', 'icon_size_top')
-        self.ids.bottom_buttons.font_size = self.cfg.getint('openolyimageshare', 'icon_size_bottom')
+        self.ids.top_buttons.font_size = sp(self.cfg.getint('openolyimageshare', 'icon_size_top'))
+        self.ids.bottom_buttons.font_size = sp(self.cfg.getint('openolyimageshare', 'icon_size_bottom'))
+        self.ids.thumbnails_content.padding[1] = dp(self.cfg.getint('openolyimageshare', 'padding_top'))
+        self.ids.thumbnails_content.padding[3] = dp(self.cfg.getint('openolyimageshare', 'padding_bottom'))
+        self.ids.thumbnails_content.do_layout()
         self.current_page = 0
         self.primary_ext_storage = app.primary_ext_storage
         self.cache_subdir = self.cfg.get('openolyimageshare', 'cache_root')
@@ -613,7 +629,6 @@ class ThumbnailsScreen(Screen):
 
 
     def hourglass_set(self, visible=True):
-        print('toggle_hourglass()')
         if visible:
             self.ids.hourglass.disabled = True
             self.ids.hourglass.opacity = 1.0
@@ -780,8 +795,8 @@ class ThumbnailsScreen(Screen):
                 img.thumbs_screen = self
                 img.dcim_path = dcim_path
                 img.img_data = img_data
-                img.markshadow = Label(font_name='fa-solid', font_size=int(mark_size*1.25), color=(0,0,0,0.6), bold=True, halign='left', valign='middle', pos_hint={'x': 0.35, 'y': 0.35})
-                img.mark = Label(font_name='fa-solid', font_size=mark_size, color=(1,1,0,1), bold=True, halign='left', valign='middle', pos_hint={'x': 0.35, 'y': 0.35})
+                img.markshadow = Label(font_name='fa-solid', font_size=sp(int(mark_size*1.25)), color=(0,0,0,0.6), bold=True, halign='left', valign='middle', pos_hint={'x': 0.35, 'y': 0.35})
+                img.mark = Label(font_name='fa-solid', font_size=sp(mark_size), color=(1,1,0,1), bold=True, halign='left', valign='middle', pos_hint={'x': 0.35, 'y': 0.35})
                 if img.dcim_path in self.images_selected:
                     img.select()
                 thumb.add_widget(img)
@@ -1125,21 +1140,20 @@ class ThumbnailsScreen(Screen):
 
 class MyApp(App):
 
+    # Interface settings.
+    MENU_PADDING = 12
+    PADDING_TOP = 0
+    PADDING_BOTTOM = 0
+    GALLERY_ROWS = 6
+    GALLERY_COLUMNS = 4
+    ICON_SIZE_TOP = 42
+    ICON_SIZE_BOTTOM = 32
+
     # Class-level variable to hold the ConfigParser() object.
     config = None
 
     def build(self):
         """ Prepare the three screens: Menu, thumbnails Gallery and Settings """
-        self.title = APP_TITLE
-        self.screen_manager = ScreenManager()
-        self.screen_manager.add_widget(MenuScreen(name='menu'))
-        settings_screen = SettingsScreen(name='settings')
-        connection_screen = ConnectionScreen(name='connection')
-        about_screen = AboutScreen(name='about')
-        self.screen_manager.add_widget(settings_screen)
-        self.screen_manager.add_widget(connection_screen)
-        self.screen_manager.add_widget(ThumbnailsScreen(name='thumbnails'))
-        self.screen_manager.add_widget(about_screen)
 
         # Select the style of the Settings widget.
         #self.settings_cls = SettingsWithSpinner
@@ -1157,12 +1171,26 @@ class MyApp(App):
                 'olympus_host_home': OLYMPUS_HOST_HOME,
                 'cache_root': CACHE_ROOT,
                 'max_cache_age_days': MAX_CACHE_AGE_DAYS,
-                'gallery_rows': GALLERY_ROWS,
-                'gallery_columns': GALLERY_COLUMNS,
-                'icon_size_top': ICON_SIZE_TOP,
-                'icon_size_bottom': ICON_SIZE_BOTTOM
+                'gallery_rows': self.GALLERY_ROWS,
+                'gallery_columns': self.GALLERY_COLUMNS,
+                'icon_size_top': self.ICON_SIZE_TOP,
+                'icon_size_bottom': self.ICON_SIZE_BOTTOM,
+                'padding_top': self.PADDING_TOP,
+                'padding_bottom': self.PADDING_BOTTOM
         }
         self.config.setdefaults('openolyimageshare', config_defaults)
+
+        self.title = APP_TITLE
+        self.screen_manager = ScreenManager()
+        self.screen_manager.add_widget(MenuScreen(name='menu'))
+        settings_screen = SettingsScreen(name='settings')
+        connection_screen = ConnectionScreen(name='connection')
+        about_screen = AboutScreen(name='about')
+        self.screen_manager.add_widget(settings_screen)
+        self.screen_manager.add_widget(connection_screen)
+        self.screen_manager.add_widget(ThumbnailsScreen(name='thumbnails'))
+        self.screen_manager.add_widget(about_screen)
+
         # Create the Settings widget adding the JSON template of the custom panel.
         settings_widget = self.create_settings()
         settings_widget.add_json_panel('Settings', self.config, 'res/layout/settings.json')
