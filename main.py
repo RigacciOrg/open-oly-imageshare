@@ -52,7 +52,7 @@ __author__ = "Niccolo Rigacci"
 __copyright__ = "Copyright 2023-2025 Niccolo Rigacci <niccolo@rigacci.org>"
 __license__ = "GPLv3-or-later"
 __email__ = "niccolo@rigacci.org"
-__version__ = "1.0.1"
+__version__ = "1.0.2"
 
 
 class RingBufferHandler(logging.Handler):
@@ -205,8 +205,8 @@ Builder.load_string("""
 
 <SettingsScreen>:
     BoxLayout:
-        padding: 0, dp(2), 0, dp(2)
         id: settings_content
+        padding: 0, dp(app.PADDING_TOP), 0, dp(app.PADDING_BOTTOM)
         orientation: 'vertical'
         BoxLayout:
             id: settings_widget_container
@@ -214,6 +214,7 @@ Builder.load_string("""
 <ConnectionScreen>:
     BoxLayout:
         id: connection_content
+        padding: dp(app.MIN_PADDING), dp(app.PADDING_TOP), dp(app.MIN_PADDING), dp(app.PADDING_BOTTOM)
         orientation: 'vertical'
         BoxLayout:
             padding: dp(8)
@@ -228,14 +229,14 @@ Builder.load_string("""
     FloatLayout:
         GridLayout:
             id: thumbnails_content
+            padding: 0, dp(app.PADDING_TOP), 0, dp(app.PADDING_BOTTOM)
             rows: 3
             cols: 1
-            padding: 0, dp(2), 0, dp(2)
             BoxLayout:
                 padding: dp(4)
                 spacing: dp(2)
                 id: top_buttons
-                font_size: sp(42)
+                font_size: sp(app.TOP_BUTTONS_FONT_SIZE)
                 size_hint: 1.0, 0.10
                 Button:
                     font_name: 'fa-solid'
@@ -267,15 +268,15 @@ Builder.load_string("""
             GridLayout:
                 size_hint: 1.0, 0.82
                 id: thumbnails_grid
-                rows: 6
-                cols: 4
+                rows: app.GALLERY_ROWS
+                cols: app.GALLERY_COLUMNS
                 spacing: dp(6)
                 padding: dp(6)
             BoxLayout:
                 padding: dp(4)
                 spacing: dp(2)
                 id: bottom_buttons
-                font_size: sp(32)
+                font_size: sp(app.BOTTOM_BUTTONS_FONT_SIZE)
                 size_hint: 1.0, 0.08
                 Button:
                     id: btn_backward
@@ -294,7 +295,7 @@ Builder.load_string("""
                 Label:
                     size_hint: 0.48, 1.0
                     id: lbl_selection
-                    font_size: self.parent.font_size
+                    font_size: sp(app.LBL_SELECTION_FONT_SIZE)
                     text: ''
                 Button:
                     id: btn_fforward
@@ -331,8 +332,8 @@ Builder.load_string("""
 <AboutScreen>:
     BoxLayout:
         id: about_content
+        padding: dp(app.MIN_PADDING), dp(app.PADDING_TOP), dp(app.MIN_PADDING), dp(app.PADDING_BOTTOM)
         orientation: 'vertical'
-        padding: dp(6)
         Label:
             id: about_label
             size_hint_y: None
@@ -420,7 +421,6 @@ class HourglassOverlay(Widget):
 class MenuScreen(Screen):
     """ Main menu screen """
 
-
     def on_pre_enter(self):
         """ Set the screen padding """
         app = App.get_running_app()
@@ -433,6 +433,11 @@ class ConnectionScreen(Screen):
     """ Check Camera Connection screen """
 
     def on_pre_enter(self):
+        """ Set the screen padding and waiting string """
+        app = App.get_running_app()
+        self.ids.connection_content.padding[1] = dp(app.config.getint('openolyimageshare', 'padding_top'))
+        self.ids.connection_content.padding[3] = dp(app.config.getint('openolyimageshare', 'padding_bottom'))
+        self.ids.connection_content.do_layout()
         self.ids.connection_label.text = 'Testing connection...'
 
     def on_enter(self):
@@ -459,22 +464,29 @@ class SettingsScreen(Screen):
     """ Settings screen """
 
     def on_pre_enter(self):
+        """ Set the screen padding """
         app = App.get_running_app()
-        self.cfg = app.config
-        self.ids.settings_content.padding[1] = dp(self.cfg.getint('openolyimageshare', 'padding_top'))
-        self.ids.settings_content.padding[3] = dp(self.cfg.getint('openolyimageshare', 'padding_bottom'))
+        self.ids.settings_content.padding[1] = dp(app.config.getint('openolyimageshare', 'padding_top'))
+        self.ids.settings_content.padding[3] = dp(app.config.getint('openolyimageshare', 'padding_bottom'))
         self.ids.settings_content.do_layout()
 
 
 class AboutScreen(Screen):
     """ About screen """
 
+    def on_pre_enter(self):
+        """ Set the screen padding """
+        app = App.get_running_app()
+        self.ids.about_content.padding[1] = dp(app.config.getint('openolyimageshare', 'padding_top'))
+        self.ids.about_content.padding[3] = dp(app.config.getint('openolyimageshare', 'padding_bottom'))
+        self.ids.about_content.do_layout()
+
     def on_enter(self):
         """ Fill the About screen with app info and scrollable log messages """
         app = App.get_running_app()
         app_download_dir = app.app_download_dir()
         about = ABOUT_MSG % (app.primary_ext_storage, app_download_dir)
-        about += '\n\n' + '='*40
+        about += '\n' + '='*40
         latest_messages = '\n'.join(log_memory_handler.get_last(60))
         num_lines = len(about.splitlines()) + 1
         self.ids.about_label.text = about
@@ -592,11 +604,12 @@ class ThumbnailsScreen(Screen):
 
 
     def on_pre_enter(self):
-        """ Initialize the images list and create directories """
+        """ Set screen padding, initialize the images list and create directories """
         app = App.get_running_app()
         self.cfg = app.config
-        self.ids.top_buttons.font_size = sp(self.cfg.getint('openolyimageshare', 'icon_size_top'))
-        self.ids.bottom_buttons.font_size = sp(self.cfg.getint('openolyimageshare', 'icon_size_bottom'))
+        self.ids.top_buttons.font_size = sp(self.cfg.getint('openolyimageshare', 'top_buttons_font_size'))
+        self.ids.bottom_buttons.font_size = sp(self.cfg.getint('openolyimageshare', 'bottom_buttons_font_size'))
+        self.ids.lbl_selection.font_size = sp(self.cfg.getint('openolyimageshare', 'lbl_selection_font_size'))
         self.ids.thumbnails_content.padding[1] = dp(self.cfg.getint('openolyimageshare', 'padding_top'))
         self.ids.thumbnails_content.padding[3] = dp(self.cfg.getint('openolyimageshare', 'padding_bottom'))
         self.ids.thumbnails_content.do_layout()
@@ -773,7 +786,7 @@ class ThumbnailsScreen(Screen):
         # To load the actual thumbnails (slow task) a sub-thread will be executed
         # while the hourglass is visible.
         Clock.schedule_once(lambda dt: self.hourglass_set(visible=True))
-        mark_size = self.cfg.getint('openolyimageshare', 'icon_size_top')
+        mark_size = self.cfg.getint('openolyimageshare', 'top_buttons_font_size')
         self.grid = self.ids.thumbnails_grid
         self.grid.clear_widgets()
         self.grid.cols = self.cfg.getint('openolyimageshare', 'gallery_columns')
@@ -1142,12 +1155,14 @@ class MyApp(App):
 
     # Interface settings.
     MENU_PADDING = 12
+    MIN_PADDING = 6
     PADDING_TOP = 0
     PADDING_BOTTOM = 0
     GALLERY_ROWS = 6
     GALLERY_COLUMNS = 4
-    ICON_SIZE_TOP = 42
-    ICON_SIZE_BOTTOM = 32
+    TOP_BUTTONS_FONT_SIZE = 36
+    BOTTOM_BUTTONS_FONT_SIZE = 28
+    LBL_SELECTION_FONT_SIZE = 24
 
     # Class-level variable to hold the ConfigParser() object.
     config = None
@@ -1173,8 +1188,9 @@ class MyApp(App):
                 'max_cache_age_days': MAX_CACHE_AGE_DAYS,
                 'gallery_rows': self.GALLERY_ROWS,
                 'gallery_columns': self.GALLERY_COLUMNS,
-                'icon_size_top': self.ICON_SIZE_TOP,
-                'icon_size_bottom': self.ICON_SIZE_BOTTOM,
+                'top_buttons_font_size': self.TOP_BUTTONS_FONT_SIZE,
+                'bottom_buttons_font_size': self.BOTTOM_BUTTONS_FONT_SIZE,
+                'lbl_selection_font_size': self.LBL_SELECTION_FONT_SIZE,
                 'padding_top': self.PADDING_TOP,
                 'padding_bottom': self.PADDING_BOTTOM
         }

@@ -69,14 +69,21 @@
         "title": "Top icons size",
         "desc": "Set the size of icons on top bar",
         "section": "openolyimageshare",
-        "key": "icon_size_top"
+        "key": "top_buttons_font_size"
     },
     {
         "type": "numeric",
         "title": "Bottom icons size",
         "desc": "Set the size of icons on screen bottom",
         "section": "openolyimageshare",
-        "key": "icon_size_bottom"
+        "key": "bottom_buttons_font_size"
+    },
+    {
+        "type": "numeric",
+        "title": "Bottom label size",
+        "desc": "Set the label size for the page number and selection counter",
+        "section": "openolyimageshare",
+        "key": "lbl_selection_font_size"
     },
     {
         "type": "title",
