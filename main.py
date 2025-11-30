@@ -28,7 +28,7 @@ import kivy
 from kivy.app import App
 from kivy.base import EventLoop
 from kivy.clock import Clock
-from kivy.config import Config, ConfigParser
+from kivy.config import Config
 from kivy.core.text import LabelBase
 from kivy.core.window import Window
 from kivy.lang import Builder
@@ -52,7 +52,7 @@ __author__ = "Niccolo Rigacci"
 __copyright__ = "Copyright 2023-2025 Niccolo Rigacci <niccolo@rigacci.org>"
 __license__ = "GPLv3-or-later"
 __email__ = "niccolo@rigacci.org"
-__version__ = "1.0.2"
+__version__ = "1.0.3"
 
 
 class RingBufferHandler(logging.Handler):
@@ -1151,35 +1151,34 @@ class ThumbnailsScreen(Screen):
             Logger.info('Download: Downloaded %d%%)' % (percent,))
 
 
-class MyApp(App):
+class OpenOly(App):
 
     # Interface settings.
     MENU_PADDING = 12
     MIN_PADDING = 6
     PADDING_TOP = 0
     PADDING_BOTTOM = 0
+    PADDING_TOP_ANDROID_15 = 20
+    PADDING_BOTTOM_ANDROID_15 = 40
     GALLERY_ROWS = 6
     GALLERY_COLUMNS = 4
     TOP_BUTTONS_FONT_SIZE = 36
     BOTTOM_BUTTONS_FONT_SIZE = 28
     LBL_SELECTION_FONT_SIZE = 24
 
-    # Class-level variable to hold the ConfigParser() object.
-    config = None
-
-    def build(self):
-        """ Prepare the three screens: Menu, thumbnails Gallery and Settings """
-
-        # Select the style of the Settings widget.
-        #self.settings_cls = SettingsWithSpinner
-        self.settings_cls = SettingsWithNoMenu
-        # Don't add the Kivy section to the Settings.
-        self.use_kivy_settings = False
-        # Read settings from ini file.
-        self.config = ConfigParser()
-        self.config.read('config.ini')
-        # Set defaults for options not found in config file.
-        config_defaults = {
+    def build_config(self, config):
+        """ Set the defaults for options not found in config file """
+        # Workaround for Android 15 edge-to-edge behavior.
+        android_15_and_above = False
+        if platform == 'android':
+            from jnius import autoclass
+            version = autoclass('android.os.Build$VERSION')
+            sdk_int = version.SDK_INT
+            release = version.RELEASE
+            if sdk_int >= 35:
+                android_15_and_above = True
+            Logger.info('OpenOly: Running on Android %s (SDK %d)' % (release, sdk_int))
+        CONFIG_DEFAULTS = {
                 'download_dst': DOWNLOAD_DST,
                 'download_dst_is_relative': DOWNLOAD_DST_IS_RELATIVE,
                 'olympus_host': OLYMPUS_HOST,
@@ -1191,11 +1190,30 @@ class MyApp(App):
                 'top_buttons_font_size': self.TOP_BUTTONS_FONT_SIZE,
                 'bottom_buttons_font_size': self.BOTTOM_BUTTONS_FONT_SIZE,
                 'lbl_selection_font_size': self.LBL_SELECTION_FONT_SIZE,
-                'padding_top': self.PADDING_TOP,
-                'padding_bottom': self.PADDING_BOTTOM
+                'padding_top': self.PADDING_TOP_ANDROID_15 if android_15_and_above else self.PADDING_TOP,
+                'padding_bottom': self.PADDING_BOTTOM_ANDROID_15 if android_15_and_above else self.PADDING_BOTTOM
         }
-        self.config.setdefaults('openolyimageshare', config_defaults)
+        # Function config.setdefaults() will read the existing config file, if any.
+        config.setdefaults('openolyimageshare', CONFIG_DEFAULTS)
 
+
+    def build_settings(self, settings):
+        """ Create the settings panel from the JSON layout """
+        # Called when build() executes selfcreate_settings().
+        settings.add_json_panel('Settings', self.config, filename='res/layout/settings.json')
+
+
+    def on_config_change(self, config, section, key, value):
+        """ Called automatically on settings change; force the rewrite of my.ini fle """
+        self.config.write()
+
+
+    def build(self):
+        """ Prepare the three screens: Menu, thumbnails Gallery and Settings """
+        # Select the style of the Settings widget.
+        self.settings_cls = SettingsWithNoMenu
+        # Don't add the Kivy section to the Settings.
+        self.use_kivy_settings = False
         self.title = APP_TITLE
         self.screen_manager = ScreenManager()
         self.screen_manager.add_widget(MenuScreen(name='menu'))
@@ -1206,10 +1224,8 @@ class MyApp(App):
         self.screen_manager.add_widget(connection_screen)
         self.screen_manager.add_widget(ThumbnailsScreen(name='thumbnails'))
         self.screen_manager.add_widget(about_screen)
-
         # Create the Settings widget adding the JSON template of the custom panel.
         settings_widget = self.create_settings()
-        settings_widget.add_json_panel('Settings', self.config, 'res/layout/settings.json')
         settings_screen.ids.settings_widget_container.add_widget(settings_widget)
         return self.screen_manager
 
@@ -1225,7 +1241,7 @@ class MyApp(App):
     def on_start(self):
         EventLoop.window.bind(on_keyboard=self.hook_keyboard)
         # Set the default storage path depending on the device
-        if platform == "android":
+        if platform == 'android':
             # Import necessary modules for Android permissions.
             from android.storage import primary_external_storage_path
             from android.permissions import request_permissions, Permission
@@ -1233,7 +1249,6 @@ class MyApp(App):
             request_permissions([
                 Permission.WRITE_EXTERNAL_STORAGE,
                 Permission.READ_EXTERNAL_STORAGE,
-                # Permission.CAMERA,
                 Permission.INTERNET
             ])
             self.primary_ext_storage = primary_external_storage_path()
@@ -1243,8 +1258,8 @@ class MyApp(App):
             Window.size = (540, 960)
         # Download destination is relative or absolute.
         app_download_dir = self.app_download_dir()
-        Logger.info('MyApp: primary_ext_storage: %s' % (self.primary_ext_storage,))
-        Logger.info('MyApp: app_download_dir(): %s' % (app_download_dir,))
+        Logger.info('OpenOly: primary_ext_storage: %s' % (self.primary_ext_storage,))
+        Logger.info('OpenOly: app_download_dir(): %s' % (app_download_dir,))
 
 
     def app_download_dir(self):
@@ -1262,4 +1277,4 @@ class MyApp(App):
 
 
 if __name__ == '__main__':
-    MyApp().run()
+    OpenOly().run()
