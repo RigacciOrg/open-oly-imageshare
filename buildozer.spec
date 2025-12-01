@@ -37,6 +37,7 @@ version.filename = %(source.dir)s/main.py
 
 # (list) Application requirements
 # comma separated e.g. requirements = sqlite3,kivy
+# No need to list Python Standard Library modules like xml.etree.ElementTree
 requirements = python3,kivy,requests,android
 
 # (str) Custom source folders for requirements

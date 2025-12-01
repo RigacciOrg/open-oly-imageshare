@@ -4,6 +4,9 @@
 Python app to download images from an Olympus camera through the
 Wi-Fi API. The app will show the thumbnails pages, from there it
 is possible to select which images to download.
+The erase function is also available, on cameras that support it.
+
+Download from: https://github.com/RigacciOrg/open-oly-imageshare
 
 See also: https://github.com/joergmlpts/olympus-wifi
 

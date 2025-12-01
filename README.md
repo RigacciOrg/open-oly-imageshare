@@ -6,7 +6,8 @@ App (Free and Open Source) to download and/or erase images from
 an Olympus camera using the Wi-Fi connection. The app is written 
 in Python using the Kivy framework; using the same codebase you 
 can run the program in Android, GNU/Linux, Windows and others 
-O.S. The app is actually tested in GNU/Linux and Android 13.
+O.S. The app is actually tested in GNU/Linux and Android 13. The 
+erase function only works on cameras that support it.
 
 ## Connect to the camera Wi-Fi
 
