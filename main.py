@@ -53,7 +53,7 @@ __author__ = "Niccolo Rigacci"
 __copyright__ = "Copyright 2023-2025 Niccolo Rigacci <niccolo@rigacci.org>"
 __license__ = "GPLv3-or-later"
 __email__ = "niccolo@rigacci.org"
-__version__ = "1.0.3"
+__version__ = "1.0.4"
 
 
 class RingBufferHandler(logging.Handler):
@@ -1198,7 +1198,7 @@ class OpenOly(App):
     GALLERY_COLUMNS = 4
     TOP_BUTTONS_FONT_SIZE = 36
     BOTTOM_BUTTONS_FONT_SIZE = 28
-    LBL_SELECTION_FONT_SIZE = 24
+    LBL_SELECTION_FONT_SIZE = 18
 
     def build_config(self, config):
         """ Set the defaults for options not found in config file """
