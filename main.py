@@ -19,6 +19,7 @@ import math
 import os
 import requests
 import time
+import xml.etree.ElementTree as ET
 from collections import deque
 from functools import partial
 from threading import Thread
@@ -120,12 +121,12 @@ OLYMPUS_ATTRIB_VOLUME    =  8
 OLYMPUS_ATTRIB_DIRECTORY = 16
 
 # Olympust Wi-Fi API commands.
-GET_MODE_PLAY  = '/switch_cammode.cgi?mode=play'
-GET_IMGLIST    = '/get_imglist.cgi'
-GET_THUMBNAIL  = '/get_thumbnail.cgi?DIR='
-GET_CAMINFO    = '/get_caminfo.cgi'
-GET_IMAGE      = '%s'
-GET_EXEC_ERASE = '/exec_erase.cgi?DIR='
+GET_MODE_PLAY   = '/switch_cammode.cgi?mode=play'
+GET_COMMANDLIST = '/get_commandlist.cgi'
+GET_IMGLIST     = '/get_imglist.cgi'
+GET_THUMBNAIL   = '/get_thumbnail.cgi?DIR='
+GET_CAMINFO     = '/get_caminfo.cgi'
+GET_EXEC_ERASE  = '/exec_erase.cgi?DIR='
 
 # Timeouts for each http request, NOT the entire response download.
 TIMEOUT_GET_COMMAND = 1.0
@@ -256,6 +257,7 @@ Builder.load_string("""
                     text: root.FA_XMARK
                     on_press: root.page_unselect_all()
                 Button:
+                    id: btn_delete
                     font_name: 'fa-solid'
                     font_size: self.parent.font_size
                     text: root.FA_TRASH
@@ -630,6 +632,9 @@ class ThumbnailsScreen(Screen):
 
     def on_enter(self):
         """ Fill the current thumbnails page once the screen is shown """
+        self.camera_can_erase = False
+        self.get_commandlist()
+        self.ids.btn_delete.disabled = not self.camera_can_erase
         self.read_images_list()
         self.fill_thumbnails_page()
         self.cache_purge_older()
@@ -657,6 +662,35 @@ class ThumbnailsScreen(Screen):
         current_page_num = self.current_page + 1
         total_pages_count = math.ceil(float(total_images_count) / (self.grid.rows * self.grid.cols))
         self.ids.lbl_selection.text = LABEL_SELECTION % (current_page_num, total_pages_count, selected_images_count, total_images_count)
+
+
+    def get_commandlist(self):
+        """ Get the list of commands supported by the camera """
+        url = 'http://%s%s' % (self.cfg.get('openolyimageshare', 'olympus_host'), GET_COMMANDLIST)
+        Logger.info('Thumbnails: Getting URL: "%s"' % (url,))
+        try:
+            resp = requests.get(url, timeout=TIMEOUT_GET_COMMAND)
+        except Exception as ex:
+            msg = 'Exception getting commandlist: %s' % (trim_ex(ex),)
+            resp = None
+        if resp is not None and resp.status_code != 200:
+            msg = 'Error in GET commandlist; response status code: %s' % (resp.status_code,)
+            resp = None
+        if resp is None:
+            Logger.error('Thumbnails: ' + msg)
+            return
+        try:
+            xml_root = ET.fromstring(resp.text)
+            for child in xml_root:
+                if child.tag == 'cgi':
+                    if 'name' in child.attrib:
+                        if child.attrib['name'] == 'exec_erase':
+                            self.camera_can_erase = True
+        except Exception as ex:
+            msg = 'Exception parsing commandlist response: %s' % (trim_ex(ex),)
+            Logger.error('Thumbnails: ' + msg)
+        msg = 'Camera has erase command: %s' % (self.camera_can_erase,)
+        Logger.info('Thumbnails: ' + msg)
 
 
     def get_dcim_imglist(self, directory):
